@@ -1,0 +1,42 @@
+# 后端镜像。glibc 基础镜像(onnxruntime-node 依赖)；受限网络可用 --build-arg 换源。
+FROM node:24-slim AS server
+ARG APT_MIRROR=deb.debian.org
+ARG NPM_REGISTRY=https://registry.npmjs.org
+ARG SHARP_BINARY_HOST=
+ARG SHARP_LIBVIPS_BINARY_HOST=
+ENV npm_config_sharp_binary_host=${SHARP_BINARY_HOST} \
+    npm_config_sharp_libvips_binary_host=${SHARP_LIBVIPS_BINARY_HOST} \
+    npm_config_nodedir=/usr/local
+WORKDIR /app
+
+# 安装依赖(better-sqlite3 源码编译用本地 Node 头文件，零外网下载)
+COPY server/package.json server/package-lock.json ./
+# ⚠️ R48:下面这条 RUN 里的 npm ci 去掉了 `--silent`(web 镜像那边同样去掉,两处一致)。
+#   理由**不是**它修好了构建(R47 的失败原因至今未定),
+#   而是七轮里镜像段失败/超时我一次都没能定位原因 ——
+#   `--silent` 吞掉错误,`--progress=plain` 也拿不到。
+#   代价只是日志变长,换来出错可诊断。
+RUN sed -i "s|deb.debian.org|${APT_MIRROR}|g" /etc/apt/sources.list.d/debian.sources \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends python3 make g++ wget ca-certificates \
+ && rm -rf /var/lib/apt/lists/* \
+ && npm ci --registry=${NPM_REGISTRY}
+
+COPY server/ ./
+
+# 数据目录
+RUN mkdir -p /data
+VOLUME ["/data"]
+
+ENV PORT=3001
+ENV DB_DIR=/data
+ENV DOCKER=1
+ENV NODE_ENV=production
+
+EXPOSE 3001
+
+# 健康检查(每 30s 探活,失败 3 次标记 unhealthy)
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD wget -qO- http://localhost:3001/api/health || exit 1
+
+CMD ["node", "index.js"]

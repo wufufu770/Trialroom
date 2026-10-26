@@ -1,0 +1,81 @@
+# Dependencies
+node_modules/
+.pnp/
+.pnp.js
+
+# Build
+dist/
+dist-ssr/
+*.local
+
+# Data (本地优先,数据不入库)
+server/data/
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite-journal
+
+# 密钥文件(预防性:目前无 git,但加入后必须排除)
+.api_token
+.master_key
+*.pem
+*.key
+
+# IDE
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# 临时测试脚本/产物
+_test_report.json
+_verify_*.cjs
+_check_*.cjs
+_screenshots/
+docker/web/i18n_screenshots/
+docker/web/*.py
+docker/web/i18n_*.png
+docker/web/check_*.py
+docker/web/verify_*.py
+
+# 备份目录(已由 data/ 覆盖,显式再写一条防 data/ 规则被改)
+**/data/backup/
+
+# Claude/Cursor agent 配置(如出现)
+.claude/
+.cursor/
+
+# W5-4 题库内容页:提交进仓库,便于 GitHub Pages 托管与外部检索
+# (构建产物 web/dist 已被 Vite 处理,不入库)
+
+# ── 自主测试循环的中间产物(R33~R49)──────────────────────────
+# 评测/生成脚本会把结果写成 dotfile,几十轮跑下来会在 web/scripts/ 攒出几十个。
+# 结论已固化进 qa/ISSUES.md 与 qa/RESEARCH.md,原始数据归档在 qa/logs/evidence/,
+# 这里的只是一次性中间物,不入库。
+web/scripts/.*.jsonl
+web/scripts/.gen-*.json
+web/scripts/.probe*.json*
+web/scripts/.tmp-*.jsonl
+
+# 归档的实验证据(有据可查,但体积大且可由脚本重跑)
+qa/logs/evidence/*.jsonl
+
+# QA 工作记录(本地,不推送)
+qa/
+
+# 本地运维脚本(不入库)
+scripts/push-via-api.py
