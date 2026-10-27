@@ -1,21 +1,29 @@
-MIT License
+版权所有(©)2026 wufufu770(Trialroom / Tryout 项目作者)。保留所有权利(All Rights Reserved)。
 
-Copyright (c) 2026 Tryout / Trialroom Contributors
+本仓库为私有商业项目。在未取得版权持有人书面许可之前,任何人或组织不得以任何形式:
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+  1. 使用、复制、修改、合并本软件及其任何部分;
+  2. 分发、再许可、销售、出租、托管(含 SaaS 形态)本软件或其衍生作品;
+  3. 将本软件用于商业用途、竞赛参赛用途或对外提供服务的用途;
+  4. 删除或遮蔽本声明及本软件中的任何版权标注。
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+本软件按"现状"提供,不附带任何明示或默示的保证。任何未经授权的使用均构成侵权。
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+第三方组件的许可不受本声明影响,各自遵循其随包许可证,见 THIRD_PARTY_LICENSES.md。
+
+商业授权与合作:wufufu770(通过 GitHub 私信联系)。
+
+--------------------------------------------------------------------------------
+Copyright (©) 2026 wufufu770 (author of the Trialroom / Tryout project).
+All Rights Reserved.
+
+This repository is a PRIVATE, PROPRIETARY commercial project. Without prior
+written permission from the copyright holder, no person or organization may:
+use, copy, modify, merge, distribute, sublicense, sell, rent, host (including
+SaaS offerings) this software or any derivative works, remove or obscure any
+copyright notice, or use it for commercial or competition purposes.
+
+THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND. Third-party
+components remain under their own licenses; see THIRD_PARTY_LICENSES.md.
+
+Commercial licensing: contact wufufu770 via GitHub.

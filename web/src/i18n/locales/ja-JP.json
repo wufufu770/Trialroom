@@ -576,7 +576,7 @@
   "about.openSourceDriven": "オープンソース駆動",
   "about.coreFeatures": "コア機能",
   "about.techStack": "技術スタック",
-  "about.licenseDesc": "本プロジェクトはMITライセンスでオープンソース化されています。使用、変更、頒布は自由です。本プロジェクトがお役に立ちましたら、リポジトリにスターをお願いします。",
+  "about.licenseDesc": "本プロジェクトは非公開の商業プロジェクトです(全著作権所有)。書面による許可なく、使用・複製・改変・配布を禁じます。サードパーティコンポーネントは各自のライセンスに従います。",
   "about.feature.scenario.title": "マルチシナリオスクリプト",
   "about.feature.scenario.desc": "12個のプリセット面接スクリプトが大企業/外資/校招/CEO最終面接をカバー。クリックで設定不要で利用可能。",
   "about.feature.multiAgent.title": "マルチAgent協力",

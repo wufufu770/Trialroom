@@ -10,6 +10,9 @@ COPY web/package.json web/package-lock.json ./
 #   代价只是构建日志变长(几 KB),换来出错可诊断。
 RUN npm ci
 COPY web/ ./
+# 平台层义务:web 构建脚本从仓库根取 LICENSE/THIRD_PARTY 进 dist(G13);
+# 构建上下文为整个仓库,补拷根文件到 / 供脚本读取(2026-10-27 G10 抓出的缺拷)
+COPY LICENSE THIRD_PARTY_LICENSES.md /
 RUN npm run build
 
 # ===== Nginx 运行阶段 =====

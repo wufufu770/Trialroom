@@ -33,6 +33,7 @@ export const GATES = [
   { id: "G13", name: "许可分发义务", cmd: "node tools/check-license-dist.mjs", kind: "static" },
   { id: "G11", name: "MCP 契约与暴露面", cmd: "node tools/check-mcp-contract.mjs && node tools/check-mcp-surface.mjs", kind: "static" },
   { id: "G10", name: "Docker 镜像构建", cmd: "node tools/check-docker-build.mjs", kind: "optional", needsDocker: true, env: "TRIALROOM_DOCKER=1" },
+  { id: "G15", name: "平台层全链路 E2E", cmd: "node server/scripts/e2e-platform-full.mjs", kind: "test" },
 ];
 
 // ── 元自检 ────────────────────────────────────────────────────────────────
@@ -55,8 +56,10 @@ function shouldSkip(g) {
     const probe = spawnSync("docker", ["--version"], { shell: true, stdio: "ignore" });
     if (probe.status !== 0) return "docker 不可用"; // 审查 F8:原写法 !x.status===0 恒 false(死分支)
   }
-  if (g.env?.startsWith("TRIALROOM_E2E") && process.env.TRIALROOM_E2E !== "1") {
-    return "TRIALROOM_E2E 未开启";
+  // env 形如 "TRIALROOM_X=1":对应变量未显式设为 1 即跳过(显式开启制)
+  if (g.env) {
+    const [name, val] = g.env.split("=");
+    if (process.env[name] !== (val ?? "1")) return `${name} 未开启`;
   }
   return null;
 }

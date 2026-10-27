@@ -18,11 +18,17 @@ const licPath = path.join(ROOT, "LICENSE");
 if (!fs.existsSync(licPath)) errs.push("根 LICENSE 不存在");
 else {
   const lic = fs.readFileSync(licPath, "utf8");
-  if (!/MIT License/.test(lic)) errs.push("LICENSE 不是 MIT 文本");
+  // 2026-10-27 起为专有商用许可(私有仓,未经书面许可不得使用),不再是 MIT
+  if (!/保留所有权利|All Rights Reserved/i.test(lic)) {
+    errs.push("LICENSE 缺少「保留所有权利 / All Rights Reserved」专有声明");
+  }
+  if (!/未取得.{0,12}许可|未经.{0,12}许可|without (prior )?(written )?permission/i.test(lic)) {
+    errs.push("LICENSE 缺少「未经书面许可不得使用」条款");
+  }
+  if (!/THIRD_PARTY_LICENSES/.test(lic)) errs.push("LICENSE 未指向第三方许可清单");
   const years = [...lic.matchAll(/20\d\d/g)].map((m) => Number(m[0]));
   const nowY = new Date().getFullYear();
-  const bad = years.filter((y) => y > nowY);
-  if (bad.length > 0) errs.push(`LICENSE 年份出现未来年份:${bad.join(",")}(当前 ${nowY})`);
+  if (years.some((y) => y > nowY)) errs.push(`LICENSE 年份出现未来年份(当前 ${nowY})`);
 }
 
 const tpPath = path.join(ROOT, "THIRD_PARTY_LICENSES.md");

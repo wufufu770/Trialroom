@@ -35,7 +35,7 @@ export function AboutPage() {
             </span>
             <span className="inline-flex items-center gap-1 border border-ide-border px-2 py-0.5 text-ide-fg-muted">
               <Github size={12} className="text-ide-fg" />
-              <span>MIT License</span>
+              <span>© 2026 版权所有 · 未经许可不得使用</span>
             </span>
             <span className="inline-flex items-center gap-1 border border-ide-border px-2 py-0.5 text-ide-fg-muted">
               <Heart size={12} className="text-ide-danger" />
@@ -89,7 +89,7 @@ export function AboutPage() {
           <div className="flex items-start gap-3">
             <Github size={16} className="mt-0.5 shrink-0 text-ide-fg" />
             <div className="text-xs leading-relaxed text-ide-fg-muted">
-              <div className="font-semibold text-ide-fg">Tryout · MIT License</div>
+              <div className="font-semibold text-ide-fg">Trialroom · 未经许可不得使用</div>
               <p className="mt-1">
                 {t("about.licenseDesc")}
                 <Heart size={11} className="mx-0.5 inline-block text-ide-danger" />。

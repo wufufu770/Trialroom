@@ -1,4 +1,5 @@
 // P5 · 支付协议与订单/权益服务测试(真实 RSA2048 密钥对往返)
+process.env.TRIALROOM_DEV = "1"; // 对抗加固后 dev 引导默认拒绝,测试显式开启
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
@@ -19,7 +20,9 @@ function freshDb() {
 }
 
 // ── RSA2 协议往返 ──────────────────────────────────────────────────────────
-const { publicKey, privateKey } = crypto.generateKeyPairSync("rsa", { modulusLength: 2048 });
+// 测试密钥用 3072 位(扫描器对 <3072 的 RSA 报弱加密;alipay.mjs 协议层不关心模长,
+// 生产密钥按支付宝要求由运营方提供 2048)
+const { publicKey, privateKey } = crypto.generateKeyPairSync("rsa", { modulusLength: 3072 });
 const pem = (k) => k.export({ type: "spki", format: "pem" }); // 公钥
 const priv = (k) => k.export({ type: "pkcs8", format: "pem" });
 
@@ -166,28 +169,52 @@ test("消耗权益:5 次包恰耗尽;台账逐笔;耗尽后 null", () => {
   assert.equal(db.prepare("SELECT COUNT(*) c FROM entitlement_ledger WHERE reason='consume'").get().c, 5);
 });
 
-test("多口径统计:内控单排除;退款/0.01/审核通过口径并列", () => {
+test("多口径统计:内控单排除;退款/0.01/审核通过口径并列(全部走生产函数)", () => {
   const db = freshDb();
   db.prepare("INSERT INTO users (id) VALUES ('u2')").run();
-  // 真实付费用户 u2:0.01 首单 + 3.9 单
+  // 真实付费用户 u2:0.01 首单 + 3.9 单(后者退款)
   const o1 = svc.createOrder({ userId: "u2", productCode: "first_order_001" });
   svc.markPaid(o1.order_no, { buyerAccountHash: "alipay:real" });
   const o2 = svc.createOrder({ userId: "u2", productCode: "single_390" });
   svc.markPaid(o2.order_no, { buyerAccountHash: "alipay:real" });
+  svc.refundOrder(o2.order_no);
   // 团队自测单 u1:打内控标
   const oi = svc.createOrder({ userId: "u1", productCode: "single_390", internal: true });
   svc.markPaid(oi.order_no, { buyerAccountHash: "alipay:internal" });
   db.prepare("UPDATE orders SET is_internal_verification = 1 WHERE order_no = ?").run(oi.order_no);
 
   const s = svc.paidUserStats();
-  assert.equal(s.order_count, 2, "内控单不计入");
-  assert.equal(s.dedup_account, 1, "u2 两单同一买家账号");
-  assert.equal(s.dedup_account_excl_001, 1, "排除 0.01 后仍有 3.9 单");
+  // 基础集合含 paid+refunded(退款金额才可算);paid 口径列只数未退单
+  assert.equal(s.order_count, 1, "仅 ¥0.01 首单仍是 paid(3.9 已退款、内控单排除)");
+  assert.equal(s.dedup_account, 1, "退款单保留在基础集合,同一买家账号键不丢");
+  assert.equal(s.dedup_account_excl_001, 1, "排除 0.01 后仍有已退款 3.9 单支撑账号键");
+  assert.equal(s.dedup_account_excl_refund, 1, "剔除退款单后 0.01 单仍在");
+  assert.equal(s.refunded_fen, 390, "退款金额必须可算(审查前恒 0 的死列)");
+  assert.equal(s.gross_fen, 1, "paid 口径毛额仅 1 分");
   // A4 口径:审核通过时间在支付之前 → 计入;在未来 → 不计入(窗口起算语义)
   svc.backfillReviewPassedAt("2026-01-01T00:00:00Z");
-  const s2 = svc.paidUserStats();
-  assert.equal(s2.dedup_account_after_review, 1, "审核通过早于支付 → 计入");
+  assert.equal(svc.paidUserStats().dedup_account_after_review, 1, "审核通过早于支付 → 计入");
   svc.backfillReviewPassedAt("2099-01-01T00:00:00Z");
-  const s3 = svc.paidUserStats();
-  assert.equal(s3.dedup_account_after_review, 0, "审核通过晚于支付 → 不计入");
+  assert.equal(svc.paidUserStats().dedup_account_after_review, 0, "审核通过晚于支付 → 不计入");
+  // 内控单不得产生 first_pay 埋点(审查 F5)
+  assert.equal(db.prepare("SELECT COUNT(*) c FROM funnel_events WHERE event='first_pay'").get().c, 1);
+});
+
+test("对抗回归:多张未付首单顺序结清,第二笔必须被拒(审查 P0-1)", () => {
+  const db = freshDb();
+  const o1 = svc.createOrder({ userId: "u1", productCode: "first_order_001" });
+  const o2 = svc.createOrder({ userId: "u1", productCode: "first_order_001" }); // 未支付状态可创建
+  assert.notEqual(o1.order_no, o2.order_no);
+  svc.markPaid(o1.order_no, { buyerAccountHash: "alipay:a" });
+  assert.throws(() => svc.markPaid(o2.order_no, { buyerAccountHash: "alipay:a" }), /限一次|UNIQUE/);
+  assert.equal(db.prepare("SELECT status FROM orders WHERE order_no=?").get(o2.order_no).status, "created",
+    "被拒订单必须留在未支付态(事务回滚)");
+  assert.equal(db.prepare("SELECT COUNT(*) c FROM entitlements").get().c, 1, "只授予一份权益");
+});
+
+test("对抗回归:同幂等键换商品返回 409 而非静默串单(审查 P2-6)", () => {
+  freshDb();
+  svc.createOrder({ userId: "u1", productCode: "single_390", idempotencyKey: "dup" });
+  assert.throws(() =>
+    svc.createOrder({ userId: "u1", productCode: "pack5_1990", idempotencyKey: "dup" }), /idempotency|绑定/);
 });

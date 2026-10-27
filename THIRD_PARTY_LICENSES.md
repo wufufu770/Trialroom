@@ -6,7 +6,9 @@
 
 ## 本项目许可
 
-Trialroom 以 [MIT](./LICENSE) 许可发布(继承自 Tryout 基座)。
+Trialroom 以**专有商用许可**发布(版权所有 © 2026 wufufu770,保留所有权利,未经书面许可不得使用/复制/修改/分发),全文见 [LICENSE](./LICENSE)。仓库为私有,不对外公开。
+
+> 注意:第三方依赖各自的原许可证不受本项目许可变更影响,仍按其随包 LICENSE 执行(下表)。
 
 ## 运行时依赖(server,`npm ci` 安装)
 
@@ -44,10 +46,10 @@ Trialroom 以 [MIT](./LICENSE) 许可发布(继承自 Tryout 基座)。
 
 | 义务 | 状态 |
 |---|---|
-| 仓库根 LICENSE(MIT) | ✅ 存在 |
+| 仓库根 LICENSE(专有商用) | ✅ 存在 |
 | 本 THIRD_PARTY_LICENSES.md | ✅ 本文件 |
 | 构建产物携带 LICENSE(web/dist/LICENSE) | ✅ build.sh 构建后复制(G13 校验) |
 | 题库来源台账 sources-license.json | ✅ 存在(G12 校验) |
-| Web「关于」页含 MIT 授权句 | ⬜ P7(Web 侧) |
+| Web「关于」页含版权声明 | ⬜(本轮切换时未改文案) |
 | Docker 镜像 LABEL org.opencontainers.image.licenses | ⬜ 部署包 |
 | GHCR 镜像描述附许可信息 | ⬜ 首次推送时 |

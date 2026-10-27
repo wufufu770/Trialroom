@@ -5,7 +5,7 @@
 本地优先的 AI 面试模拟工具：用 **808 道题的参考答案**作为客观基准，评估你的技术回答是否正确——而不只是"表达是否流畅"。
 
 [![CI](https://github.com/wufufu770/Tryout/actions/workflows/ci.yml/badge.svg)](https://github.com/wufufu770/Tryout/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: Proprietary](https://img.shields.io/badge/License-专有商用-red.svg)](LICENSE)
 [![Node Version](https://img.shields.io/badge/node-%3E%3D20-brightgreen.svg)](https://nodejs.org/)
 [![GHCR](https://img.shields.io/badge/image-ghcr.io%2Fwufufu770%2Ftryout--server-blue)](https://github.com/wufufu770/Tryout/pkgs/container/tryout-server)
 
@@ -54,7 +54,7 @@ Tryout 内置 **808 道题的参考答案**，把它当作技术正确性的客�
 | 反馈什么 | 表达是否流畅、语速、填充词 | **技术回答是否正确** |
 | 判断依据 | 通用 LLM 主观判断 | **题库参考答案作客观基准** |
 | 数据流向 | 上传到云端 | **0 字节离开本机**，可全离线跑 Ollama |
-| 成本 | 订阅制，按次或按月 | **0 元**（MIT 开源） |
+| 成本 | 订阅制，按次或按月 | **0 元**（自托管;专有商用许可,未经许可不得使用） |
 | 上手 | 注册账号、绑定手机号 | `docker compose up` |
 
 ## 三个数字
@@ -247,7 +247,7 @@ docker compose up -d --build
 
 ## License
 
-[MIT](LICENSE)
+版权所有 © 2026 wufufu770,保留所有权利(专有商用许可,未经书面许可不得使用/分发),见 [LICENSE](LICENSE)。
 
 ---
 

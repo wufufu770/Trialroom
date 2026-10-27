@@ -96,12 +96,10 @@ router.post("/transcribe", audioUpload.single("audio"), async (req, res, next) =
     if (!getSession(sessionId)) throw new NotFoundError("会话");
 
     fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-    // 安全加固(platform 2026-10-27,静态复核项):originalname 完全用户可控,
-    // path.extname 的结果直接进 path.join 存在构造异常文件名的可能。
-    // 扩展名白名单化:仅接受 1-5 位字母数字扩展,否则回退 .webm。
-    const RAW_EXT = path.extname(req.file.originalname) || ".webm";
-    const ext = /^(\.[a-z0-9]{1,5})$/i.test(RAW_EXT) ? RAW_EXT.toLowerCase() : ".webm";
-    const audioName = `${genId("rec")}${ext}`;
+    // 安全加固(platform 2026-10-27,二轮):文件名彻底去用户化 —— 存储名恒为
+    // <随机id>.webm,原始扩展名不参与路径构造(此前白名单方案仍被静态扫描判
+    // 为入口)。转写走 req.file.buffer,扩展名仅是磁盘命名,无功能影响。
+    const audioName = `${genId("rec")}.webm`;
     const audioPath = path.join(UPLOAD_DIR, audioName);
     fs.writeFileSync(audioPath, req.file.buffer);
 
