@@ -1,0 +1,260 @@
+{
+  "schema_version": "mimosa-task-review/v2",
+  "run_id": "20261027T000514331Z-52598-1c930bc1f548",
+  "run_status": "inconclusive",
+  "errors": [
+    {
+      "stage": "scan",
+      "target": "server/test/platform-mcp.test.js",
+      "reason": "scanner_failed: spawnSync /usr/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "scan",
+      "target": "server/test/platform-payment.test.js",
+      "reason": "scanner_failed: spawnSync /usr/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "scan",
+      "target": "server/test/platform-e2e-pay.test.js",
+      "reason": "scanner_failed: spawnSync /usr/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "supply-chain-check",
+      "target": ".",
+      "reason": "stop_budget_exhausted: focused supply-chain check was not run before the gate budget"
+    }
+  ],
+  "coverage": {
+    "schema_version": "mimosa-hook-coverage/v1",
+    "status": "partial",
+    "scope": "hook_observed_diff",
+    "baseline": {
+      "complete": true,
+      "captured_files": 224,
+      "candidate_limit": 5000,
+      "truncated": false,
+      "enumeration_error_count": 0,
+      "snapshot_error_count": 0,
+      "compensated_target_count": 4
+    },
+    "change_tracking": {
+      "touched_observed": 3,
+      "touched_retained": 3,
+      "truncated": false,
+      "bash_mutation": true,
+      "bash_discovered": 4,
+      "bash_discovery_limit": 80,
+      "bash_discovery_truncated": false
+    },
+    "candidates": {
+      "eligible_files": 4,
+      "selected_files": 4,
+      "limit": 20,
+      "truncated": false
+    },
+    "scanning": {
+      "required_files": 3,
+      "scanned_files": 0,
+      "skipped_files": 0,
+      "failed_files": 3,
+      "project_checks_required": 1,
+      "project_checks_completed": 0
+    },
+    "notification": {
+      "eligible_findings": 0,
+      "detailed_findings": 0,
+      "detail_limit": 3,
+      "truncated": false
+    },
+    "reason_counts": {
+      "scanner_failed": 3,
+      "stop_budget_exhausted": 1,
+      "project_check_failed": 4
+    },
+    "reasons": [
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "server/test/platform-mcp.test.js",
+        "detail": "spawnSync /usr/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "server/test/platform-payment.test.js",
+        "detail": "spawnSync /usr/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "server/test/platform-e2e-pay.test.js",
+        "detail": "spawnSync /usr/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "stop_budget_exhausted",
+        "stage": "supply-chain-check",
+        "target": ".",
+        "detail": "focused supply-chain check was not run before the gate budget",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "server/test/platform-mcp.test.js",
+        "detail": "scanner_failed: spawnSync /usr/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "server/test/platform-payment.test.js",
+        "detail": "scanner_failed: spawnSync /usr/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "server/test/platform-e2e-pay.test.js",
+        "detail": "scanner_failed: spawnSync /usr/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "supply-chain-check",
+        "target": ".",
+        "detail": "stop_budget_exhausted: focused supply-chain check was not run before the gate budget",
+        "affects_completion": true
+      }
+    ],
+    "reasons_truncated": false
+  },
+  "generated_at": "2026-10-27T00:05:14.331Z",
+  "session_id": "session_c83bf54bf3f9834cd71330d8fd6dc23d",
+  "target": ".",
+  "revision": "c779252b3f07c1aa9da50586c85ec0a411c045a5",
+  "rules_version": "unavailable",
+  "diff_hash": "e8e1b35df92a4a92e2fe4c96766e357c727bd1c5868a355c7ebfc8ef50ec5211",
+  "diff": {
+    "algorithm": "sha256",
+    "changed_file_count": 4,
+    "changed_files": [
+      {
+        "file": "server/test/platform-e2e-pay.test.js",
+        "ranges": [
+          {
+            "start": 1,
+            "end": 89
+          }
+        ],
+        "before_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "after_hash": "a90db222ce9742129315cdcdc7d1bd66949bf6fc4779dbf5746773dbd6a1c9b2"
+      },
+      {
+        "file": "server/test/platform-mcp.test.js",
+        "ranges": [
+          {
+            "start": 37,
+            "end": 37
+          },
+          {
+            "start": 110,
+            "end": 110
+          },
+          {
+            "start": 112,
+            "end": 113
+          },
+          {
+            "start": 137,
+            "end": 141
+          },
+          {
+            "start": 145,
+            "end": 145
+          },
+          {
+            "start": 149,
+            "end": 159
+          }
+        ],
+        "before_hash": "7f765914e3d564f2d7dcff6a90ffc65d414419d785f5a47b0b612a2b969ae2cf",
+        "after_hash": "026932c2a04dd029d03d631ecd356736e0afd9f0de8de6ec74978d053d44326f"
+      },
+      {
+        "file": "server/test/platform-payment.test.js",
+        "ranges": [
+          {
+            "start": 1,
+            "end": 193
+          }
+        ],
+        "before_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "after_hash": "a4efc23d2e41fb85f7b0d342773b6c8dc9401b6e3cdd5fcbb582d3b3b81e9b3b"
+      },
+      {
+        "file": "web/package.json",
+        "ranges": [
+          {
+            "start": 8,
+            "end": 8
+          }
+        ],
+        "before_hash": "7737d630157e21227acd694aba0897a78507fd6afa7369d41f686d8ca3bcc20d",
+        "after_hash": "14b037cf38a9aaec50576c75f9c0ef6c74d4236c097596162d71c7b41746ef93"
+      }
+    ]
+  },
+  "timing": {
+    "started_at": "2026-10-27T00:05:10.815Z",
+    "completed_at": "2026-10-27T00:05:14.331Z",
+    "duration_ms": 3516,
+    "measurement": "hook_wall_clock"
+  },
+  "tokens": {
+    "input": 0,
+    "output": 0,
+    "total": 0,
+    "model_calls": 0,
+    "measurement": "known-zero"
+  },
+  "telemetry": {
+    "schemaVersion": "mimosa-gate-telemetry/v1",
+    "profile": "gate",
+    "operation": "Stop",
+    "outcome": "partial/INCONCLUSIVE",
+    "latencyMs": 3516,
+    "peakMemoryBytes": 182616064,
+    "memoryMeasurement": "max-observed-process-rss",
+    "scannedFiles": 0,
+    "cache": {
+      "hits": 0,
+      "misses": 0,
+      "measurement": "not-applicable"
+    },
+    "denyCount": 0,
+    "tokens": {
+      "input": 0,
+      "output": 0,
+      "total": 0,
+      "modelCalls": 0,
+      "measurement": "known-zero"
+    }
+  },
+  "finding_count": 0,
+  "rewake_finding_count": 0,
+  "evidence_boundary": {
+    "scan": "candidate",
+    "static_fix_verification": "observed_static_only",
+    "runtime_verification": "not_performed"
+  },
+  "finding_events": [],
+  "findings": [],
+  "artifacts": {
+    "immutable_report": ".mimosa/reports/task-review-session_c83bf54bf3f9834cd71330d8fd6dc23d-20261027T000514331Z-52598-1c930bc1f548.json",
+    "latest_report": ".mimosa/reports/task-review-session_c83bf54bf3f9834cd71330d8fd6dc23d.json",
+    "history_summary": ".mimosa/history/run-20261027T000514331Z-52598-1c930bc1f548.json"
+  }
+}

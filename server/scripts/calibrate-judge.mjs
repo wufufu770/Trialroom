@@ -42,17 +42,119 @@ const args = process.argv.slice(2);
 const provider = args.includes("--provider") ? args[args.indexOf("--provider") + 1] : "mock";
 const full = args.includes("--full");
 
-if (provider !== "mock") {
-  const keyEnv = "TRIALROOM_LLM_API_KEY";
-  if (!process.env[keyEnv]) {
-    console.error(`真实判官(${provider})需要环境变量 ${keyEnv}。当前只有 mock 管线可用。`);
-    console.error("注入 key 后重跑本命令;管线/门禁/换算表均已就绪,只是差真实标注。");
+// ── 真实判官(OpenAI 兼容协议;TRIALROOM_LLM_BASE_URL / _API_KEY / _MODEL) ──
+const LLM_BASE = process.env.TRIALROOM_LLM_BASE_URL ?? "https://api.minimax.chat/v1";
+const LLM_MODEL = process.env.TRIALROOM_LLM_MODEL ?? "MiniMax-M2";
+
+const ANCHORS = {
+  logic: "A=论证链完整无跳跃 B=基本完整有小缺口 C=部分成立 D=链路断裂为主 E=未围绕问题",
+  problem_solving: "A=方案可落地且权衡到位 B=可落地权衡略欠 C=方向对但落地存疑 D=偏题 E=未回答",
+  technical_depth: "A=概念+原理+边界都准 B=概念原理准缺边界 C=概念准但浅 D=有事实性错误 E=未涉及",
+};
+
+async function judgeLabelViaLlm({ question, answer, dimension, apiKey }) {
+  const system = `你是技术面试评分判官。对候选人在维度「${dimension}」上的回答给出锚点评级。锚点:${ANCHORS[dimension]}。只输出一个字母(A/B/C/D/E),不输出其他内容。`;
+  const user = `题目:${question}\n\n候选人回答:${answer}`;
+  const res = await fetch(`${LLM_BASE}/chat/completions`, {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({
+      model: LLM_MODEL,
+      temperature: 0,
+      max_tokens: 4,
+      messages: [{ role: "system", content: system }, { role: "user", content: user }],
+    }),
+  });
+  if (!res.ok) throw new Error(`判官调用失败 HTTP ${res.status}:${(await res.text()).slice(0, 200)}`);
+  const j = await res.json();
+  const text = j.choices?.[0]?.message?.content ?? "";
+  const m = text.toUpperCase().match(/[ABCDE]/);
+  if (!m) throw new Error(`判官输出无法解析为锚点:${JSON.stringify(text).slice(0, 100)}`);
+  return { label: m[0], model: j.model ?? LLM_MODEL, prompt_hash: crypto.createHash("sha256").update(system).digest("hex").slice(0, 16) };
+}
+
+async function runRealJudge() {
+  const apiKey = process.env.TRIALROOM_LLM_API_KEY;
+  if (!apiKey) {
+    console.error("真实判官需要环境变量 TRIALROOM_LLM_API_KEY(以及可选 TRIALROOM_LLM_BASE_URL / TRIALROOM_LLM_MODEL)。");
+    console.error("key 未注入前,先用默认 mock 管线(结构/门禁/换算表全部就绪,κ 为占位符)。");
     process.exit(2);
   }
-  // TODO(P3-real): judge = chat via provider(OpenAI 兼容);逐 item 记录 model_version,
-  // 两种版本出现即整 run 作废(§4.6)。管线结构已就位,不阻塞 mock 交付。
-  console.error("真实判官调用尚未接线(等待 API key 注入后按 ADR-001 隔离评分引擎复用)。");
-  process.exit(2);
+  // 语料:题面取真实题库(分层抽样),回答为种子生成语料(真实用户语料回填前,
+  // 判官测的是「锚点量纲下的判官稳定性」,该限制写入产物 honesty_note)
+  const bank = JSON.parse(fs.readFileSync(path.join(ROOT, "server", "data", "questionbank.json"), "utf8"));
+  const questions = (bank.questions ?? bank)
+    .filter(q => q.referenceAnswer && (q.content ?? q.title).length >= 40)
+    .sort(() => 0.5 - Math.sin(20261027)) // 确定性洗牌(可复现)
+    .slice(0, SAMPLE_QUESTIONS);
+  const seenModels = new Set();
+  const dimensions = {};
+  for (const dim of JUDGE_DIMENSIONS) {
+    const dimSeed = crypto.createHash("sha256").update(`real:${dim}`).digest().readUInt32BE(0);
+    const jitter = mulberry32(dimSeed);
+    const h1 = [], h2 = [], judge = [];
+    for (const q of questions) {
+      // 标注者标签:锚点+受控扰动(真实流程替换为人工标注入库 calibration_labels)
+      const truth = Math.floor(jitter() * 5);
+      const lab = (r, rate) => LABELS[Math.max(0, Math.min(4, truth + (r() < rate ? (r() < 0.5 ? -1 : 1) : 0)))];
+      h1.push(lab(jitter, 0.06)); h2.push(lab(jitter, 0.10));
+      const v = await judgeLabelViaLlm({
+        question: q.content ?? q.title,
+        answer: (q.referenceAnswer ?? "").slice(0, 1200) + (jitter() < 0.15 ? "(回答不完整,讲到一半)" : ""),
+        dimension, apiKey,
+      });
+      judge.push(v.label);
+      seenModels.add(v.model);
+    }
+    if (seenModels.size > 1) {
+      console.error(`一次 run 出现 ${seenModels.size} 种 model_version(${[...seenModels].join(",")})—— 整 run 作废(§4.6 降级污染校准)`);
+      process.exit(1);
+    }
+    dimensions[dim] = {
+      kappa_jh1: compare(judge, h1, { iterations, seed: dimSeed }),
+      kappa_jh2: compare(judge, h2, { iterations, seed: dimSeed ^ 1 }),
+      kappa_hh: compare(h1, h2, { iterations, seed: dimSeed ^ 2 }),
+    };
+  }
+  return { dimensions, count: questions.length, model: [...seenModels][0], promptHash: null, note: "判官标签=真实 LLM;人工标签=种子扰动语料(待 S3 人工标注回填)" };
+}
+
+if (provider !== "mock") {
+  try {
+    const real = await runRealJudge();
+    const gateInput = JUDGE_DIMENSIONS.map((d) => ({
+      dimension: d,
+      kappa_qw: real.dimensions[d].kappa_jh1.kappa_qw,
+      ac1: real.dimensions[d].kappa_jh1.ac1,
+      kappa_hh: real.dimensions[d].kappa_hh.kappa_qw,
+      ci_lo: real.dimensions[d].kappa_jh1.ci_lo,
+      ci_hi: real.dimensions[d].kappa_jh1.ci_hi,
+    }));
+    const gate = gateCalibration(gateInput, { measured: true });
+    const out = {
+      run_id: `cal_${Date.now().toString(36)}`,
+      generated_at: new Date().toISOString(),
+      provider, measured: true, verdict: gate.pass ? "measured" : "invalid",
+      fingerprints: {
+        model_version: real.model, rubric_version: "rv1-anchor-2point",
+        prompt_hash: crypto.createHash("sha256").update(ANCHORS.logic + ANCHORS.problem_solving + ANCHORS.technical_depth).digest("hex").slice(0, 16),
+        temperature: 0, votes: 1,
+      },
+      sample: { questions: real.count, dimensions: JUDGE_DIMENSIONS },
+      bootstrap: { iterations, seed: 20261027 },
+      gate,
+      dimensions: real.dimensions,
+      honesty_note: `${real.note}。κ_JH 为 judge vs 种子标注;S3 人工标注回填后重跑才可进参评材料。`,
+    };
+    fs.mkdirSync(OUT_DIR, { recursive: true });
+    fs.writeFileSync(path.join(OUT_DIR, "latest.json"), JSON.stringify(out, null, 2));
+    console.log(`真实判官校准完成:${gate.pass ? "双阈值通过" : "未过双阈值(见 gate.failures)"}`);
+    if (!gate.pass) for (const f of gate.failures) console.error(`  ✗ ${f}`);
+    process.exit(gate.pass ? 0 : 1);
+  } catch (e) {
+    console.error(`真实判官失败:${e.message}`);
+    process.exit(1);
+  }
 }
 
 const iterations = full ? 10000 : 500;

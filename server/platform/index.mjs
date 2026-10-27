@@ -7,6 +7,8 @@ import express from "express";
 import { getDb } from "./db.mjs";
 import { ensureAdminFromEnv } from "./auth.mjs";
 import * as payment from "./routes/payment.mjs";
+import * as roomsRoutes from "./routes/rooms.mjs";
+import { trackEvent } from "./rooms.mjs";
 import { mcpAuthMiddleware } from "./mcp/auth-mcp.mjs";
 import { mcpRouter } from "./mcp/router.mjs";
 
@@ -15,6 +17,7 @@ export function mountPlatform(app) {
   ensureAdminFromEnv();    // 若配置了 TRIALROOM_ADMIN_TOKEN 则引导管理员
 
   app.use("/api/platform", payment.router);
+  app.use("/api/platform", roomsRoutes.router);
 
   // 支付宝异步通知:form-urlencoded 原文留存(req.rawBody)→ RSA2 验签。
   // 公开端点:鉴权即签名本身;G06 白名单显式登记(作用域豁免审计制)。
@@ -23,6 +26,20 @@ export function mountPlatform(app) {
     verify: (req, _res, buf) => { req.rawBody = buf.toString("utf8"); },
   });
   app.post("/pay/alipay/notify", ...payment.notifyHandler(rawBodyParser));
+
+  // 匿名埋点(落地页 landing_uv 等无 token 场景):公开端点,G06 白名单登记;
+  // 事件名白名单在 trackEvent 内校验,内容上限 2KB,不落 PII(user_hash 为匿名哈希)。
+  app.post("/track", express.json({ limit: "8kb" }), (req, res) => {
+    const r = trackEvent({
+      event: req.body?.event,
+      userHash: req.body?.user_hash ?? null,
+      sessionTicket: req.body?.session_ticket ?? null,
+      roomCode: req.body?.room_code ?? null,
+      props: req.body?.props ?? {},
+    });
+    if (r.error) return res.status(r.error.status).json({ ok: false, message: r.error.message });
+    res.status(202).json({ ok: true });
+  });
 
   // MCP:同挂载内 auth 在前、router 在后(G06 的 PASS 形态)
   app.use("/mcp", mcpAuthMiddleware, mcpRouter);

@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { MessageSquare, Users, FileText, History, Settings, Users2, Store, Workflow, Info, Newspaper } from "lucide-react";
+import { MessageSquare, Users, FileText, History, Settings, Users2, Store, Workflow, Info, Newspaper, CreditCard, Rocket } from "lucide-react";
 import { cn } from "@/shared";
 import { useI18n } from "@/i18n";
 import { OnboardingModal } from "@/components/OnboardingModal";
@@ -25,6 +25,8 @@ export function useLayoutContext(): LayoutContextValue {
 const NAV_ITEMS = [
   { to: "/interview", labelKey: "nav.interview", Icon: MessageSquare },
   { to: "/group", labelKey: "nav.group", Icon: Users2 },
+  { to: "/platform", label: "平台工作台", Icon: CreditCard },
+  { to: "/welcome", label: "落地页", Icon: Rocket },
   { to: "/flow", labelKey: "nav.flow", Icon: Workflow },
   { to: "/experiences", labelKey: "nav.experiences", Icon: Newspaper },
   { to: "/market", labelKey: "nav.market", Icon: Store },
@@ -213,11 +215,11 @@ export function IdeLayout() {
         <div className="flex min-h-0 flex-1">
           {/* 左侧 ActivityBar(RTL 时通过 dir=rtl 自动翻转) */}
           <nav className="flex w-12 shrink-0 flex-col items-center gap-1 border-r border-ide-border bg-ide-bg-alt py-2 rtl:border-r-0 rtl:border-l">
-            {NAV_ITEMS.map(({ to, labelKey, Icon }) => (
+            {NAV_ITEMS.map(({ to, labelKey, label, Icon }: any) => (
               <NavLink
                 key={to}
                 to={to}
-                title={t(labelKey)}
+                title={labelKey ? t(labelKey) : label}
                 className={({ isActive }) =>
                   cn(
                     "group relative flex h-10 w-10 items-center justify-center text-ide-fg-muted transition-colors hover:text-ide-fg",

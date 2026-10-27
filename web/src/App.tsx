@@ -15,6 +15,8 @@ const MaterialPage = lazy(() => import("@/pages/MaterialPage").then(m => ({ defa
 const HistoryPage = lazy(() => import("@/pages/HistoryPage").then(m => ({ default: m.HistoryPage })));
 const SettingsPage = lazy(() => import("@/pages/SettingsPage").then(m => ({ default: m.SettingsPage })));
 const AboutPage = lazy(() => import("@/pages/AboutPage").then(m => ({ default: m.AboutPage })));
+const PlatformPage = lazy(() => import("@/pages/PlatformPage").then(m => ({ default: m.PlatformPage })));
+const LandingPage = lazy(() => import("@/pages/LandingPage").then(m => ({ default: m.LandingPage })));
 
 // 路由级 loading 占位
 function RouteLoading() {
@@ -97,6 +99,8 @@ export default function App() {
           <Route path="/history" element={<LazyRoute><HistoryPage /></LazyRoute>} />
           <Route path="/settings" element={<LazyRoute><SettingsPage /></LazyRoute>} />
           <Route path="/about" element={<LazyRoute><AboutPage /></LazyRoute>} />
+          <Route path="/platform" element={<LazyRoute><PlatformPage /></LazyRoute>} />
+          <Route path="/welcome" element={<LazyRoute><LandingPage /></LazyRoute>} />
         </Route>
         <Route path="*" element={<Navigate to="/interview" replace />} />
       </Routes>
