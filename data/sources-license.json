@@ -13,9 +13,10 @@
     ]
   },
   "new_track": {
-    "count": 0,
-    "provenance": "none-yet",
-    "statement": "Pro 轨新制题(目标 116 题带 rubricHints 与判据链)尚未开工;开工后逐题登记 author/date/sources 为空。"
+    "count": 12,
+    "provenance": "trialroom-original",
+    "file": "server/data/pro-bank.json",
+    "statement": "Pro 轨首批 12 题为 trialroom 原创(2026-10-27),带五档 rubricHints 与完整判据;目标扩至 116。"
   },
   "content_domain_whitelist": {
     "example.com": "占位域名(RFC 2606),题面示例",
@@ -37,9 +38,25 @@
     }
   ],
   "permitted_corpora": [
-    { "name": "AIMLInterviews", "license": "MIT", "rule": "可引用,保留版权声明" },
-    { "name": "interviewer-mcp", "license": "MIT", "rule": "可引用,保留版权声明" },
-    { "name": "HelloGGX", "license": "Apache-2.0", "rule": "可引用,保留 NOTICE" },
-    { "name": "clover-public", "license": "MIT", "rule": "可引用,保留版权声明" }
+    {
+      "name": "AIMLInterviews",
+      "license": "MIT",
+      "rule": "可引用,保留版权声明"
+    },
+    {
+      "name": "interviewer-mcp",
+      "license": "MIT",
+      "rule": "可引用,保留版权声明"
+    },
+    {
+      "name": "HelloGGX",
+      "license": "Apache-2.0",
+      "rule": "可引用,保留 NOTICE"
+    },
+    {
+      "name": "clover-public",
+      "license": "MIT",
+      "rule": "可引用,保留版权声明"
+    }
   ]
 }

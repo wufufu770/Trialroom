@@ -2,6 +2,8 @@
 import express from "express";
 import { platformAuth, createDevUser, requireScope } from "../auth.mjs";
 import * as rooms from "../rooms.mjs";
+import { startAttempt, finishAttempt, myAttempts, closeRoom, leaveRoom } from "../attempts.mjs";
+import { aiFollowUp } from "../interviewer.mjs";
 
 export const router = express.Router();
 
@@ -45,5 +47,48 @@ router.get("/rooms/:roomId/messages", platformAuth, (req, res) => {
 router.post("/rooms/:roomId/messages", platformAuth, requireScope("platform:write"), (req, res) => {
   const r = rooms.postMessage({ roomId: req.params.roomId, userId: req.user.id, content: req.body?.content, role: req.body?.role });
   if (r.error) return res.status(r.error.status).json({ ok: false, code: r.error.code, message: r.error.message });
+  res.json({ ok: true, ...r });
+});
+
+// ── P0#1 面试尝试(付费闭环:开跑扣次 / 收卷判定 / 我的尝试) ───────────────
+router.post("/attempts", platformAuth, requireScope("platform:write"), (req, res) => {
+  try {
+    const r = startAttempt({ userId: req.user.id, roomCode: req.body?.room_code, position: req.body?.position, difficulty: req.body?.difficulty });
+    res.json({ ok: true, ...r });
+  } catch (e) {
+    res.status(e.status ?? 500).json({ ok: false, code: e.code ?? "ATTEMPT_FAILED", message: e.message });
+  }
+});
+
+router.post("/attempts/:id/finish", platformAuth, requireScope("platform:write"), (req, res) => {
+  try {
+    const r = finishAttempt({ attemptId: req.params.id, userId: req.user.id, ...req.body });
+    res.json({ ok: true, ...r });
+  } catch (e) {
+    res.status(e.status ?? 500).json({ ok: false, message: e.message });
+  }
+});
+
+router.get("/attempts", platformAuth, (req, res) => {
+  res.json({ ok: true, attempts: myAttempts(req.user.id, req.query.limit) });
+});
+
+// ── P1#8 房间生命周期 ─────────────────────────────────────────────────────
+router.post("/rooms/:roomId/close", platformAuth, requireScope("platform:write"), (req, res) => {
+  const r = closeRoom({ roomId: req.params.roomId, userId: req.user.id });
+  if (r.error) return res.status(r.error.status).json({ ok: false, code: r.error.code, message: "房间不存在" });
+  res.json({ ok: true, ...r });
+});
+
+router.post("/rooms/:roomId/leave", platformAuth, requireScope("platform:write"), (req, res) => {
+  const r = leaveRoom({ roomId: req.params.roomId, userId: req.user.id });
+  if (r.error) return res.status(r.error.status).json({ ok: false, code: r.error.code, message: "座位不存在" });
+  res.json({ ok: true, ...r });
+});
+
+// P2#13:AI 面试官追问(LLM 可用时走模型,否则模板降级)
+router.post("/rooms/:roomId/ai-turn", platformAuth, requireScope("platform:write"), async (req, res) => {
+  const r = await aiFollowUp({ roomId: req.params.roomId, userId: req.user.id });
+  if (r.error) return res.status(r.error.status).json({ ok: false, code: r.error.code, message: "房间不存在" });
   res.json({ ok: true, ...r });
 });

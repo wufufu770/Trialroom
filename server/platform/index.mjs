@@ -10,6 +10,9 @@ import { createRateLimiter } from "../rateLimiter.js";
 import * as payment from "./routes/payment.mjs";
 import * as roomsRoutes from "./routes/rooms.mjs";
 import { trackEvent } from "./rooms.mjs";
+import { buildAuthStartUrl, loginWithAuthCode, consumeState } from "./auth-alipay.mjs";
+import { scheduleReconciliation } from "./payment/reconcile.mjs";
+import { scheduleBackup } from "./backup.mjs";
 import { mcpAuthMiddleware } from "./mcp/auth-mcp.mjs";
 import { mcpRouter } from "./mcp/router.mjs";
 
@@ -43,6 +46,51 @@ export function mountPlatform(app) {
     });
     if (r.error) return res.status(r.error.status).json({ ok: false, message: r.error.message });
     res.status(202).json({ ok: true });
+  });
+
+  // P0#3 支付宝 OAuth 登录(公开入口;state 一次性防 CSRF)
+  app.get("/api/platform/auth/alipay/start", publicLimiter, (req, res) => {
+    try {
+      const redirect = process.env.ALIPAY_OAUTH_REDIRECT ?? `${req.protocol}://${req.get("host")}/api/platform/auth/alipay/callback`;
+      const { url } = buildAuthStartUrl(redirect);
+      res.redirect(url);
+    } catch (e) {
+      res.status(e.status ?? 503).json({ ok: false, message: e.message });
+    }
+  });
+  app.get("/api/platform/auth/alipay/callback", publicLimiter, async (req, res) => {
+    const { auth_code, state } = req.query;
+    if (!consumeState(state) || !auth_code) {
+      return res.status(400).json({ ok: false, message: "state 无效或缺少 auth_code(10 分钟一次性)" });
+    }
+    try {
+      const r = await loginWithAuthCode(auth_code);
+      // 开发态直接回 JSON;生产建议改为 Set-Cookie + 302 回前端(部署清单项)
+      res.json({ ok: true, ...r });
+    } catch (e) {
+      res.status(e.status ?? 502).json({ ok: false, message: e.message });
+    }
+  });
+
+  // P1#5 对账补偿定时任务(仅配钥态)+ P2#17 每日备份
+  scheduleReconciliation();
+  scheduleBackup();
+
+  // P2#11 分享卡(SVG):房号即邀请凭证,公开传播是设计意图;公共限流防滥用
+  app.get("/share/:code.svg", publicLimiter, (req, res) => {
+    const code = String(req.params.code ?? "");
+    if (!/^\d{6}$/.test(code)) return res.status(404).type("text").send("not found");
+    const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="320">
+  <rect width="100%" height="100%" fill="#0d1117"/>
+  <text x="40" y="70" fill="#3fb950" font-family="monospace" font-size="26">\$ Trialroom · 面试房间邀请</text>
+  <text x="40" y="170" fill="#e6edf3" font-family="monospace" font-size="88" letter-spacing="18">${esc(code)}</text>
+  <text x="40" y="240" fill="#8b949e" font-size="18">打开 ${esc(process.env.PUBLIC_BASE_URL ?? "http://localhost:5173")}/welcome?code=${esc(code)}</text>
+  <text x="40" y="275" fill="#8b949e" font-size="15">AI 多面试官 · 808 题客观基准 · 数据不出本机</text>
+</svg>`;
+    res.setHeader("content-type", "image/svg+xml");
+    res.setHeader("cache-control", "public, max-age=300");
+    res.send(svg);
   });
 
   // MCP:限流(审查 P0-1:join_room 可 74 分钟枚举 10^6 房号)→ 同挂载内 auth 在前

@@ -121,3 +121,56 @@ export function verifyNotify(rawParams, expectedOrder) {
     gmt_create: p.gmt_create, gmt_payment: p.gmt_payment,
   };
 }
+
+// ── 服务端 OpenAPI 调用(P1#5/#6):查单与退款 ──────────────────────────────
+// 出网主机校验:网关默认只信支付宝官方域;测试需要本地桩时显式
+// ALIPAY_TRUST_GATEWAY=1(部署文档注明危险,仅测试)。
+const TRUSTED_HOSTS = new Set(["openapi.alipay.com", "openapi.alipaydev.com", "mapi.alipay.com"]);
+function assertGatewaySafe() {
+  const u = new URL(gateway());
+  if (TRUSTED_HOSTS.has(u.hostname)) return;
+  if (process.env.ALIPAY_TRUST_GATEWAY === "1") return;
+  throw new Error(`网关主机不在信任列表:${u.hostname}(测试桩需 ALIPAY_TRUST_GATEWAY=1)`);
+}
+
+/** 签名并 POST 网关(OpenAPI 表单协议),返回响应 JSON 的对应业务段。 */
+export async function gatewayCall(method, bizContent) {
+  if (!isConfigured()) throw new Error("支付宝三要素未配置");
+  assertGatewaySafe();
+  const params = {
+    app_id: process.env.ALIPAY_APP_ID, method, charset: "utf-8", sign_type: "RSA2",
+    timestamp: new Date().toISOString().replace("T", " ").slice(0, 19), version: "1.0",
+    biz_content: JSON.stringify(bizContent),
+  };
+  params.sign = rsa2Sign(params);
+  const body = new URLSearchParams(params).toString();
+  const res = await fetch(gateway(), {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body,
+  });
+  const j = await res.json();
+  const key = method.replace(/\./g, "_") + "_response";
+  const biz = j[key];
+  if (!biz) throw new Error(`网关响应异常:${JSON.stringify(j).slice(0, 200)}`);
+  if (biz.code && String(biz.code) !== "10000") {
+    throw Object.assign(new Error(`支付宝 ${method} 失败:${biz.code} ${biz.sub_msg ?? biz.msg}`), { alipayCode: biz.code });
+  }
+  return biz;
+}
+
+/** 主动查单(P1#5 对账):返回 {trade_status, trade_no, total_amount, buyer_user_id?} */
+export async function queryTrade(outTradeNo) {
+  const biz = await gatewayCall("alipay.trade.query", { out_trade_no: outTradeNo });
+  return { trade_status: biz.trade_status, trade_no: biz.trade_no ?? null,
+    total_amount: biz.total_amount ?? null, buyer_user_id: biz.buyer_user_id ?? null };
+}
+
+/** 发起退款(P1#6):refund_no 幂等(支付宝同单同额重复退款返回成功) */
+export async function refundTrade({ outTradeNo, refundAmountFen, refundNo, reason = "用户退款" }) {
+  const biz = await gatewayCall("alipay.trade.refund", {
+    out_trade_no: outTradeNo, refund_amount: (refundAmountFen / 100).toFixed(2),
+    out_request_no: refundNo, refund_reason: reason.slice(0, 60),
+  });
+  return { fund_change: biz.fund_change ?? "Y", refund_fee: biz.refund_fee ?? null };
+}

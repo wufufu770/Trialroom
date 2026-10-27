@@ -111,7 +111,26 @@ export function markPaid(orderNo, { tradeNo = null, buyerAccountHash = null, buy
   return { order: getOrder(orderNo), granted: true };
 }
 
-/** 退款:订单置 refunded + 权益作废 + 台账。仅 ¥3.9 及以上(¥0.01 失败走补发,不产生退款流水 —— §5.9.3)。 */
+/**
+ * 渠道退款(P1#6):真实单先执行支付宝侧,成功才落本地;失败抛错且本地不动。
+ * mock 轨/未配钥 → 直接本地流转(对账与测试语义)。
+ */
+export async function refundOrderWithChannel(orderNo, amountFen) {
+  const alipay = await import("./alipay.mjs");
+  const order0 = getOrder(orderNo);
+  if (order0 && order0.provider === "alipay_web" && alipay.isConfigured()) {
+    await alipay.refundTrade({
+      outTradeNo: orderNo, refundAmountFen: amountFen ?? order0.amount_fen,
+      refundNo: `RF${orderNo}`, reason: "trialroom 用户退款",
+    });
+  }
+  return refundOrder(orderNo, amountFen);
+}
+
+/**
+ * 退款(本地状态):订单置 refunded + 权益作废 + 台账。
+ * 仅 ¥3.9 及以上(¥0.01 失败走补发,不产生退款流水 —— §5.9.3)。
+ */
 export function refundOrder(orderNo, amountFen) {
   const db = getDb();
   const order = getOrder(orderNo);

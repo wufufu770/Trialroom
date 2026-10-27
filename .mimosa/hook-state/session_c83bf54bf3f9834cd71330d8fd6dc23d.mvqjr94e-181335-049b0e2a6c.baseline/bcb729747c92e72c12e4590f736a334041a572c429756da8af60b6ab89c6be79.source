@@ -136,7 +136,7 @@ app.use("/api", (req, res, next) => {
 // ---- Rate limit 中间件 ----
 // R49:实现已移到 server/rateLimiter.js —— index.js 是入口,import 即启动服务,
 // 单测拿不到这里的函数;抽出去才能对**短窗口**对 Retry-After 的时间契约做行为断言。
-app.use("/api", createRateLimiter({ windowMs: 60_000, max: 120, label: "general" }));
+app.use("/api", createRateLimiter({ windowMs: 60_000, max: Number(process.env.API_RATE_GENERAL ?? 120), label: "general" }));
 app.use("/api/chat", createRateLimiter({ windowMs: 60_000, max: 20, label: "chat" }));
 // v11:分析路由(语音转写 / 逐题反馈 / 押题),LLM 调用共享 chat 限流语义
 app.use("/api", analysisRouter);

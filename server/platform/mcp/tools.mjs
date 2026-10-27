@@ -5,6 +5,7 @@
 //   * ask_next_question 推进权判 room_seats.is_host,不判 scope
 //   * evidence.search 只检索本人有座位的房间(证据区),永不跨房
 import { getDb, genId, nowIso } from "../db.mjs";
+import { pickQuestion } from "../questions.mjs";
 
 // join_room 错码锁定(11-final-plan §3.4.4:按房号失败限流锁定)。
 // 单进程内存态;多副本部署时换共享存储。锁定期一律返回 NOT_FOUND(不泄露锁定状态)。
@@ -96,7 +97,14 @@ export const tools = {
       // 并发/残留占位:该键正被另一执行体持有,拒绝而非重复推进(审查 P1-4)
       return { error: { code: -32005, message: "idempotency key in flight" } };
     }
-    const question = { turn_index: turn, question: `第 ${turn} 题(由面试官 Agent 生成,基座题库注入)` };
+    // P0#2:真题注入 —— 按房间 industry(难度可空)从 808 题库取未用题;
+    // referenceAnswer 永不出服务端(证据/结论分离,§3.6)。
+    const picked = pickQuestion({ roomId: room_id, industry: room.industry, difficulty: room.difficulty });
+    const question = picked
+      ? { turn_index: turn, question_ref: picked.question_ref, title: picked.title,
+          question: picked.content, type: picked.type, difficulty: picked.difficulty,
+          estimated_minutes: picked.estimated_minutes }
+      : { turn_index: turn, question: "(题库已用尽:本房全部题目均已问过)" };
     db.prepare(`INSERT INTO room_messages (id, room_id, seat_id, turn_index, role, content) VALUES (?, ?, ?, ?, 'interviewer', ?)`)
       .run(genId("msg"), room_id, seat.id, turn, JSON.stringify(question));
     db.prepare("UPDATE idempotency_keys SET status='done', response=? WHERE key=?")

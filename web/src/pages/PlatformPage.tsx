@@ -5,7 +5,7 @@ import { useSearchParams } from "react-router-dom";
 import { getApiToken } from "@/api/client";
 import { platformApi, getPlatformToken, setPlatformToken, fenToYuan, track, PlatformProduct, PlatformOrder, PlatformRoom } from "@/api/platform";
 
-type Tab = "checkout" | "rooms" | "review" | "token";
+type Tab = "checkout" | "rooms" | "review" | "admin" | "token";
 
 export function PlatformPage() {
   const [tab, setTab] = useState<Tab>("checkout");
@@ -25,7 +25,7 @@ export function PlatformPage() {
           {!hasToken && <span className="ml-2 border border-ide-warning px-2 py-0.5 text-xs text-ide-warning">未登录平台</span>}
         </header>
         <nav className="mb-6 flex gap-1 border-b border-ide-border font-mono text-sm">
-          {([["checkout", "收银台"], ["rooms", "面试房间"], ["review", "复盘对照"], ["token", "平台令牌"]] as [Tab, string][]).map(([id, label]) => (
+          {([["checkout", "收银台"], ["rooms", "面试房间"], ["review", "复盘对照"], ["admin", "管理"], ["token", "平台令牌"]] as [Tab, string][]).map(([id, label]) => (
             <button key={id} onClick={() => setTab(id)}
               className={`px-3 py-2 ${tab === id ? "border-b-2 border-ide-accent text-ide-accent" : "text-ide-fg-muted hover:text-ide-fg"}`}>
               {label}
@@ -35,6 +35,7 @@ export function PlatformPage() {
         {tab === "checkout" && <CheckoutTab />}
         {tab === "rooms" && <RoomsTab initialCode={params.get("code") ?? ""} />}
         {tab === "review" && <ReviewTab />}
+        {tab === "admin" && <AdminTab />}
         {tab === "token" && <TokenTab />}
       </div>
     </div>
@@ -153,6 +154,8 @@ function RoomsTab({ initialCode }: { initialCode: string }) {
             }}>
             复制邀请链接
           </button>
+          <button onClick={() => platformApi.closeRoom(created.room_id).then(refresh).catch((e: any) => setNotice(e.message))}
+            className="ml-2 border border-ide-danger px-2 py-0.5 text-xs text-ide-danger">关闭房间</button>
         </div>
       )}
       {notice && <div className="text-xs text-ide-warning">{notice}</div>}
@@ -178,6 +181,7 @@ function ReviewTab() {
   const [left, setLeft] = useState<any>(null);
   const [right, setRight] = useState<any>(null);
   const [err, setErr] = useState("");
+  const [attemptsMode, setAttemptsMode] = useState(false);
 
   // 基座会话 token 从 client 的 getApiToken 取(sessionStorage,审查 F4:
   // 此前直读 localStorage 永远 null,复盘对照恒 401)
@@ -186,6 +190,17 @@ function ReviewTab() {
     return token ? { authorization: `Bearer ${token}` } : {};
   };
   const loadSessions = async () => {
+    // P1#10:优先平台 attempts(带三条件判定),为空回退基座会话
+    try {
+      const att = await platformApi.myAttempts();
+      const list = (att.attempts ?? []).filter((a: any) => a.finished_at).slice(0, 2);
+      if (list.length > 0) {
+        if (list[0]) setA(list[0].id);
+        if (list[1]) setB(list[1].id);
+        setAttemptsMode(true);
+        return;
+      }
+    } catch { /* 未登录平台则回退 */ }
     try {
       const res = await fetch("/api/sessions", { headers: authHeaders() });
       if (!res.ok) return setErr(`读取会话失败(${res.status}):需要先在设置页配置访问 token`);
@@ -199,6 +214,14 @@ function ReviewTab() {
 
   const load = async (id: string, setter: (v: any) => void) => {
     if (!id) return setter(null);
+    if (attemptsMode) {
+      const att = await platformApi.myAttempts();
+      const one = (att.attempts ?? []).find((x: any) => x.id === id);
+      const q = one ? JSON.parse(one.qualification ?? "{}") : {};
+      return setter({ position: one?.position ?? "attempt", evaluation: {
+        dimensions: Object.entries(q).filter(([k]) => k.startsWith("cond")).map(([k, v]) => ({ name: k, score: v ? 1 : 0 })),
+      }, qualification: q });
+    }
     try {
       const res = await fetch(`/api/sessions/${id}`, { headers: authHeaders() });
       if (!res.ok) return setter(null);
@@ -206,7 +229,7 @@ function ReviewTab() {
       setter(j.data ?? j);
     } catch { setter(null); }
   };
-  useEffect(() => { load(a, setLeft); load(b, setRight); }, [a, b]);
+  useEffect(() => { load(a, setLeft); load(b, setRight); }, [a, b, attemptsMode]);
 
   return (
     <div className="space-y-3 font-mono text-sm">
@@ -261,3 +284,50 @@ function TokenTab() {
 }
 
 export default PlatformPage;
+
+// ── 管理标签页(P1#9):多口径统计卡 + 订单审计(admin token 专属) ──────────
+function AdminTab() {
+  const [stats, setStats] = useState<Record<string, number> | null>(null);
+  const [orders, setOrders] = useState<PlatformOrder[]>([]);
+  const [err, setErr] = useState("");
+  const load = async () => {
+    try {
+      setStats((await platformApi.paidStats()).stats);
+      setOrders((await platformApi.adminOrders(30)).orders);
+    } catch (e: any) { setErr(e.message); }
+  };
+  useEffect(() => { load(); }, []);
+  const cards: [string, string, string][] = [
+    ["dedup_account", "去重付费(账号)", "官方 A1 口径"],
+    ["dedup_account_excl_001", "去重付费(排除 ¥0.01)", "A2 口径"],
+    ["dedup_account_excl_refund", "去重付费(剔除退款)", "A3 口径"],
+    ["order_count", "有效订单数", "paid 口径"],
+    ["gross_fen", "毛额(分)", "paid 口径"],
+    ["refunded_fen", "退款(分)", "含部分退款"],
+  ];
+  return (
+    <div className="space-y-4 font-mono text-sm">
+      {err && <div className="border border-ide-warning p-2 text-xs text-ide-warning">{err}(需 TRIALROOM_ADMIN_TOKEN 对应的管理员令牌)</div>}
+      <div className="grid grid-cols-3 gap-2">
+        {cards.map(([k, label, note]) => (
+          <div key={k} className="border border-ide-border bg-ide-bg-alt p-3">
+            <div className="text-xs text-ide-fg-muted">{label}</div>
+            <div className="mt-1 text-xl text-ide-accent">{stats ? (stats[k] ?? 0) : "…"}</div>
+            <div className="text-[10px] text-ide-fg-muted">{note}</div>
+          </div>
+        ))}
+      </div>
+      <div className="border border-ide-border">
+        <div className="border-b border-ide-border bg-ide-bg-alt px-3 py-2 text-xs text-ide-fg-muted">最近订单(全部渠道/状态)</div>
+        {orders.length === 0 ? <div className="p-3 text-xs text-ide-fg-muted">无订单或无权限</div> : orders.map((o) => (
+          <div key={o.order_no} className="flex items-center justify-between border-b border-ide-border px-3 py-1.5 text-xs last:border-0">
+            <span className="truncate">{o.order_no} · {o.product_name}</span>
+            <span className={o.status === "paid" ? "text-ide-success" : o.status === "refunded" ? "text-ide-warning" : "text-ide-fg-muted"}>
+              {o.status} · {fenToYuan(o.amount_fen)}{o.is_internal_verification ? " · 内控" : ""}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}

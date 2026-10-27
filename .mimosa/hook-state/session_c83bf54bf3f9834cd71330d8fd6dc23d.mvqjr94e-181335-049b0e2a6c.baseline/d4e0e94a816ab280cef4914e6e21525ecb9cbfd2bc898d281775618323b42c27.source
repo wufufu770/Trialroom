@@ -1,0 +1,64 @@
+// P0#2 / P2#13 · 真题注入 + AI 追问
+process.env.TRIALROOM_DEV = "1";
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import Database from "better-sqlite3";
+import { applyMigrations } from "../platform/db/migrate.mjs";
+import { setDbForTesting, getDb } from "../platform/db.mjs";
+import { pickQuestion } from "../platform/questions.mjs";
+import * as rooms from "../platform/rooms.mjs";
+import { aiFollowUp } from "../platform/interviewer.mjs";
+import { tools } from "../platform/mcp/tools.mjs";
+
+function fresh() {
+  const db = new Database(":memory:");
+  db.pragma("foreign_keys = ON");
+  applyMigrations(db);
+  setDbForTesting(db);
+  db.prepare("INSERT INTO users (id) VALUES ('uA')").run();
+  return db;
+}
+
+test("取题器:按行业命中、去重、兜底全库;无房间上下文也可取", () => {
+  fresh();
+  const r = rooms.createRoom({ hostUserId: "uA", industry: "backend" });
+  const q1 = pickQuestion({ roomId: r.room_id, industry: "backend" });
+  assert.equal(q1.industry, "backend");
+  assert.ok(q1.question_ref && q1.content.length > 10);
+  assert.ok(!("referenceAnswer" in q1), "取题结果不得含参考答案");
+  // 模拟已用 → 下一题不同
+  getDb().prepare(`INSERT INTO room_messages (id, room_id, seat_id, turn_index, role, content)
+    SELECT 'm1', ?, s.id, 1, 'interviewer', json_object('question_ref', ?) FROM room_seats s WHERE s.room_id = ? AND s.is_host = 1`)
+    .run(r.room_id, q1.question_ref, r.room_id);
+  const q2 = pickQuestion({ roomId: r.room_id, industry: "backend" });
+  assert.notEqual(q2.question_ref, q1.question_ref);
+  // 行业不匹配(空房间)→ 全库兜底
+  const q3 = pickQuestion({ roomId: "rm_" + "z".repeat(22), industry: "nonexistent" });
+  assert.ok(q3, "全库兜底必有题");
+});
+
+test("MCP 推进注入真题:同房两题不同、题干真实、答案零泄漏", () => {
+  fresh();
+  const r = rooms.createRoom({ hostUserId: "uA", industry: "qa" });
+  const mcp = { token_id: "tk", user_id: "uA", scopes: ["rooms:advance"] };
+  const a1 = tools["ask_next_question"](mcp, { room_id: r.room_id, idempotency_key: "k1" });
+  assert.ok(a1.question_ref?.startsWith("qa-"), `qa 行业应命中 qa-*,实际 ${a1.question_ref}`);
+  assert.ok(a1.question.length > 20, "题干为真实内容");
+  const a2 = tools["ask_next_question"](mcp, { room_id: r.room_id, idempotency_key: "k2" });
+  assert.notEqual(a2.question_ref, a1.question_ref);
+  const all = JSON.stringify(getDb().prepare("SELECT content FROM room_messages WHERE room_id = ?").all(r.room_id));
+  assert.ok(!/"referenceAnswer"/.test(all), "消息流零参考答案");
+});
+
+test("AI 追问:模板降级可跑;连追幂等(noop);外人 404", async () => {
+  fresh();
+  const r = rooms.createRoom({ hostUserId: "uA" });
+  const first = await aiFollowUp({ roomId: r.room_id, userId: "uA" });
+  assert.equal(first.source, "template", "无 key 时模板降级");
+  assert.ok(first.content.length > 10);
+  const second = await aiFollowUp({ roomId: r.room_id, userId: "uA" });
+  assert.equal(second.source, "noop", "本轮已有面试官回应则不重复生成");
+  getDb().prepare("INSERT INTO users (id) VALUES ('uX')").run();
+  const outsider = await aiFollowUp({ roomId: r.room_id, userId: "uX" });
+  assert.equal(outsider.error.status, 404);
+});

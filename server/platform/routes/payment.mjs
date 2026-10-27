@@ -93,3 +93,13 @@ export function notifyHandler(rawBodyParser) {
     res.type("text").send("success"); // 支付宝要求字面 "success"
   }];
 }
+
+// 管理端:订单审计(P1#9;platform:admin 专属,非 admin 同 404 不泄露)
+router.get("/admin/orders", platformAuth, requireScope("platform:admin"), (req, res) => {
+  const limit = Math.min(Number(req.query.limit) || 50, 200);
+  const status = req.query.status;
+  const rows = status
+    ? getDb().prepare("SELECT * FROM orders WHERE status = ? ORDER BY created_at DESC LIMIT ?").all(String(status), limit)
+    : getDb().prepare("SELECT * FROM orders ORDER BY created_at DESC LIMIT ?").all(limit);
+  res.json({ ok: true, orders: rows });
+});

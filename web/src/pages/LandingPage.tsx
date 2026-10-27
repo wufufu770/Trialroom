@@ -16,6 +16,22 @@ export function LandingPage() {
     platformApi.products().then(r => setProducts(r.products)).catch(() => {});
   }, []);
 
+  // P1#7 支付结果轮询:支付宝 return_url 带 order_no 回跳,轮询到 paid/超时
+  const paidOrder = params.get("order_no");
+  const [payState, setPayState] = useState<"polling" | "paid" | "timeout" | null>(paidOrder ? "polling" : null);
+  useEffect(() => {
+    if (!paidOrder) return;
+    let n = 0;
+    const timer = setInterval(async () => {
+      try {
+        const { order } = await platformApi.order(paidOrder);
+        if (order.status === "paid") { setPayState("paid"); clearInterval(timer); track("first_pay", { order_no: paidOrder }); }
+      } catch { /* 未登录平台时只展示等待态 */ }
+      if (++n > 30) { setPayState("timeout"); clearInterval(timer); }
+    }, 2000);
+    return () => clearInterval(timer);
+  }, [paidOrder]);
+
   const join = async () => {
     try {
       const r = await platformApi.joinRoom(code.trim());
@@ -50,6 +66,14 @@ export function LandingPage() {
             ))}
           </div>
         </section>
+
+        {payState && (
+          <section className={`mt-6 border p-4 font-mono ${payState === "paid" ? "border-ide-success bg-ide-success/10" : "border-ide-border bg-ide-bg-alt"}`}>
+            {payState === "polling" && <div className="animate-pulse text-sm">支付确认中…(轮询订单 {paidOrder})</div>}
+            {payState === "paid" && <div className="text-sm text-ide-success">✅ 支付成功,权益已到账 —— 前往 <Link to="/platform" className="underline">平台工作台</Link> 开始练习</div>}
+            {payState === "timeout" && <div className="text-sm text-ide-warning">暂未查到支付结果(可能仍在处理,稍后在平台工作台-收银台查看订单)</div>}
+          </section>
+        )}
 
         {/* 分享入座(邀请深链高亮) */}
         {inviteCode && (

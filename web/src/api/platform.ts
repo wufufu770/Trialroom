@@ -11,6 +11,7 @@ export interface PlatformProduct {
 export interface PlatformOrder {
   order_no: string; product_code: string; product_name: string;
   amount_fen: number; status: string; provider: string; paid_at: string | null; created_at: string;
+  is_internal_verification?: number;
 }
 export interface PlatformRoom {
   room_id: string; status: string; industry: string | null; position: string | null;
@@ -48,6 +49,8 @@ export const platformApi = {
     call<{ order_no: string; amount_fen: number; provider: string; pay_form?: string; pay_url?: string }>("POST", "/orders", { product_code, idempotency_key }),
   order: (orderNo: string) => call<{ order: PlatformOrder }>("GET", `/orders/${orderNo}`),
   mockPay: (orderNo: string) => call<{ order: PlatformOrder }>("POST", `/orders/${orderNo}/mock-pay`),
+  adminOrders: (limit = 50) => call<{ orders: PlatformOrder[] }>("GET", `/admin/orders?limit=${limit}`),
+  paidStats: () => call<{ stats: Record<string, number> }>("GET", "/stats/paid"),
   createRoom: (industry?: string, position?: string) =>
     call<{ room_id: string; room_code: string }>("POST", "/rooms", { industry, position }),
   myRooms: () => call<{ rooms: PlatformRoom[] }>("GET", "/rooms"),
@@ -55,6 +58,13 @@ export const platformApi = {
   roomDetail: (roomId: string) => call<{ room: any; seats: any[]; your_seat_no: number; is_host: boolean }>("GET", `/rooms/${roomId}`),
   messages: (roomId: string, after = 0) => call<{ messages: any[] }>("GET", `/rooms/${roomId}/messages?after=${after}`),
   postMessage: (roomId: string, content: string) => call<{ turn_index: number }>("POST", `/rooms/${roomId}/messages`, { content }),
+  aiTurn: (roomId: string) => call<{ turn_index: number; content: string; source: string }>("POST", `/rooms/${roomId}/ai-turn`),
+  closeRoom: (roomId: string) => call<{ closed: boolean }>("POST", `/rooms/${roomId}/close`),
+  startAttempt: (payload: { room_code?: string; position?: string; difficulty?: string }) =>
+    call<{ attempt_id: string; entitlement: { kind: string; quota_left: number | null } }>("POST", "/attempts", payload),
+  finishAttempt: (id: string, payload: Record<string, unknown>) => call<{ qualification: any }>("POST", `/attempts/${id}/finish`, payload),
+  myAttempts: () => call<{ attempts: any[] }>("GET", "/attempts"),
+  shareCardUrl: (code: string) => `/share/${code}.svg`,
 };
 
 /** 匿名埋点(不走平台令牌)。session_ticket 一次生成,贯穿落地页→练习。 */

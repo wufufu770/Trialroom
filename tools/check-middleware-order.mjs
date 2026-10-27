@@ -40,11 +40,16 @@ const AUTH_SCOPES = {
 };
 
 // 白名单:精确完整路径。豁免必须显式登记并给理由(作用域豁免审计制):
-//   /api/health          基础探活(基座既有豁免)
-//   /pay/alipay/notify   外部回调,鉴权 = 支付宝 RSA2 验签(通知体逐字段)
-//   /track               匿名埋点(落地页 landing_uv),事件名白名单+2KB 上限,
-//                        不落 PII;只写 funnel_events 一张表
-const EXEMPT_REMAINDERS = new Set(["/api/health", "/pay/alipay/notify", "/track"]);
+//   /api/health                基础探活(基座既有豁免)
+//   /pay/alipay/notify         外部回调,鉴权 = 支付宝 RSA2 验签(通知体逐字段)
+//   /track                     匿名埋点,事件白名单+2KB 上限,不落 PII
+//   /api/platform/auth/alipay/* 登录入口(OAuth 授权码流):公开是语义本身,
+//                              防护 = state 一次性(10min)+ 公共限流;登录后才是平台令牌
+const EXEMPT_REMAINDERS = new Set([
+  "/api/health", "/pay/alipay/notify", "/track",
+  "/api/platform/auth/alipay/start", "/api/platform/auth/alipay/callback",
+  "/share/:code.svg",
+]);
 
 const METHOD_NAMES = ["get", "post", "put", "delete", "patch", "all"];
 
