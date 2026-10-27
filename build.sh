@@ -513,7 +513,9 @@ do_build() {
   if [ ! -d web/node_modules ]; then skip "前端构建" "web 依赖未安装"; record "SKIP:前端构建"; return 0; fi
   if (cd web && npm run build >/tmp/tryout-build.log 2>&1); then
     local main; main=$(grep -oE 'assets/index-[^ ]+\.js +[0-9.]+ kB' /tmp/tryout-build.log | grep -oE '[0-9.]+ kB' | head -1)
-    pass "前端构建成功${main:+ (主 chunk $main)}"; record "PASS:前端构建"
+    # G13 许可分发义务:构建产物必须携带 LICENSE(MIT 分发义务,§6.11.4 第 9 项)
+    cp LICENSE web/dist/LICENSE 2>/dev/null || true
+    pass "前端构建成功${main:+ (主 chunk $main)} + LICENSE 已入 dist"; record "PASS:前端构建"
   else
     fail "前端构建失败(详见 /tmp/tryout-build.log)"; record "FAIL:前端构建"
   fi

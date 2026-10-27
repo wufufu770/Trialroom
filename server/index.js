@@ -115,9 +115,23 @@ app.use(responseHelpers);
 // ---- 结构化请求日志(替代 console.log) ----
 app.use(requestLogger);
 
+// ---- 认证中间件(必须在所有路由型挂载之前 —— G06 门禁的作用域覆盖判定) ----
+// v10:/api/health 默认豁免(基础探活);?verbose=1 需认证(防 host/port/tokenBudget 等信息泄露)
+// 前端通过 Authorization: Bearer <token> 携带
+// platform 修复(2026-10-27):此前本挂载位于 analysisRouter 之后,导致 analysis
+// 全部 7 条路由(transcribe / recordings / answers score / answers / missed /
+// delete / predict-questions)绕过认证 —— 其中含 2 个 IDOR 风险的 session
+// 子路径读取与 3 个 LLM 消耗端点,仅有通用限流在挡。由 G06 作用域覆盖门禁
+// 抓出(见 tools/check-middleware-order.mjs),现将认证前移到首个路由挂载之前。
+app.use("/api", (req, res, next) => {
+  // 健康检查:仅基础探活(无 verbose)豁免;verbose=1 需认证
+  if (req.path === "/health" && req.query.verbose !== "1") return next();
+  return authMiddleware(req, res, next);
+});
+
 // ---- Rate limit 中间件 ----
 // R49:实现已移到 server/rateLimiter.js —— index.js 是入口,import 即启动服务,
-// 单测拿不到这里的函数;抽出去才能用**短窗口**对 Retry-After 的时间契约做行为断言。
+// 单测拿不到这里的函数;抽出去才能对**短窗口**对 Retry-After 的时间契约做行为断言。
 app.use("/api", createRateLimiter({ windowMs: 60_000, max: 120, label: "general" }));
 app.use("/api/chat", createRateLimiter({ windowMs: 60_000, max: 20, label: "chat" }));
 // v11:分析路由(语音转写 / 逐题反馈 / 押题),LLM 调用共享 chat 限流语义
@@ -330,15 +344,6 @@ function validateBaseUrlSync(url, { allowLocal = false } = {}) {
     });
   }
 }
-
-// ---- 认证中间件(放在健康检查之前,只对 /api/* 生效) ----
-// v10:/api/health 默认豁免(基础探活);?verbose=1 需认证(防 host/port/tokenBudget 等信息泄露)
-// 前端通过 Authorization: Bearer <token> 携带
-app.use("/api", (req, res, next) => {
-  // 健康检查:仅基础探活(无 verbose)豁免;verbose=1 需认证
-  if (req.path === "/health" && req.query.verbose !== "1") return next();
-  return authMiddleware(req, res, next);
-});
 
 // ---- 健康检查(深化:DB + 磁盘 + 认证状态 + LLM 可达性 + token 预算) ----
 // v10:默认仅返回 {ok: true}(信息收敛,避免泄露 host/port/tokenBudget/llmProvider/dbSize 等)
@@ -1233,6 +1238,11 @@ app.use((err, req, res, next) => {
 seedIfEmpty();
 seedDefaultProviders();
 seedBuiltinMaterials();
+
+// platform(Trialroom 平台层):/api/platform + /pay/alipay/notify + /mcp
+// 必须在 app.listen 之前挂载;鉴权作用域由 G06 门禁(check-middleware-order)守护。
+import { mountPlatform } from "./platform/index.mjs";
+mountPlatform(app);
 
 // v9:优雅关闭(SIGTERM/SIGINT 时停止接受新连接,等待进行中请求结束)
 const server = app.listen(PORT, HOST, () => {

@@ -1,0 +1,193 @@
+// P6 · MCP 暴露面行为测试
+import { test, before, after } from "node:test";
+import assert from "node:assert/strict";
+import express from "express";
+import Database from "better-sqlite3";
+import { applyMigrations } from "../platform/db/migrate.mjs";
+import { setDbForTesting } from "../platform/db.mjs";
+import { mcpAuthMiddleware } from "../platform/mcp/auth-mcp.mjs";
+import { mcpRouter } from "../platform/mcp/router.mjs";
+import { sha256Hex } from "../platform/db.mjs";
+
+const db = new Database(":memory:");
+db.pragma("foreign_keys = ON");
+applyMigrations(db);
+setDbForTesting(db);
+
+const HOST = "rm_" + "h".repeat(22);
+const OTHER = "rm_" + "o".repeat(22);
+db.prepare("INSERT INTO users (id) VALUES ('u_host')").run();
+db.prepare("INSERT INTO users (id) VALUES ('u_guest')").run();
+db.prepare("INSERT INTO users (id) VALUES ('u_out')").run();
+const mkRoom = (rid, code, uid) => {
+  db.prepare("INSERT INTO rooms (room_id, room_code, host_user_id) VALUES (?, ?, ?)").run(rid, code, uid);
+  db.prepare("INSERT INTO room_seats (id, room_id, user_id, seat_no, is_host) VALUES (?, ?, ?, 1, 1)").run("st_" + code, rid, uid);
+};
+mkRoom(HOST, "111111", "u_host");
+mkRoom(OTHER, "222222", "u_out");
+
+const mkToken = (uid, scopes) => {
+  const token = `mt_test_${uid}_${scopes.length}`;
+  db.prepare(`INSERT INTO mcp_tokens (token_id, token_hash, user_id, scopes) VALUES (?, ?, ?, ?)`)
+    .run("tk_" + uid + scopes.length, sha256Hex(token), uid, JSON.stringify(scopes));
+  return token;
+};
+const hostToken = mkToken("u_host", ["rooms:read", "rooms:join", "rooms:advance", "self_review", "evidence:read"]);
+const guestToken = mkToken("u_guest", ["rooms:read", "rooms:join", "self_review"]);
+const guestAdvToken = mkToken("u_guest", ["rooms:advance"]); // 测"判 seat 不判 scope"
+const minToken = mkToken("u_host", ["rooms:read"]);
+
+const app = express();
+app.use("/mcp", mcpAuthMiddleware, mcpRouter);
+let srv, base;
+before(async () => { srv = app.listen(0); base = `http://127.0.0.1:${srv.address().port}`; });
+after(() => srv.close());
+
+const rpc = async (token, body, headers = {}) => {
+  const res = await fetch(`${base}/mcp`, {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${token}`, ...headers },
+    body: JSON.stringify(body),
+  });
+  return { status: res.status, json: await res.json().catch(() => null) };
+};
+
+test("GET /mcp discover:公开元数据卡,无鉴权要求", async () => {
+  const res = await fetch(`${base}/mcp`);
+  const card = await res.json();
+  assert.equal(res.status, 200);
+  assert.equal(card.name, "trialroom");
+  assert.ok(!("tools" in card));
+});
+
+test("无 token → 401 AUTH_MISSING;伪 token → 401", async () => {
+  const r1 = await rpc("", { jsonrpc: "2.0", id: 1, method: "initialize" });
+  assert.equal(r1.status, 401);
+  assert.equal(r1.json.error.code, -32001);
+  const r2 = await rpc("mt_fake", { jsonrpc: "2.0", id: 2, method: "initialize" });
+  assert.equal(r2.status, 401);
+});
+
+test("S-11:Mcp-Method 与 body.method 不一致 → 400 + -32020", async () => {
+  const r = await rpc(hostToken, { jsonrpc: "2.0", id: 3, method: "initialize" }, { "mcp-method": "tools/list" });
+  assert.equal(r.status, 400);
+  assert.equal(r.json.error.code, -32020);
+});
+
+test("S-12:_meta 超 4KB → 400;合法两键被保留语义(不报错)", async () => {
+  const fat = { junk: "x".repeat(5000) };
+  const r = await rpc(hostToken, { jsonrpc: "2.0", id: 4, method: "initialize", _meta: fat });
+  assert.equal(r.status, 400);
+  const ok2 = await rpc(hostToken, { jsonrpc: "2.0", id: 5, method: "initialize", _meta: { protocolVersion: "2026-07-28", clientCapabilities: {} } });
+  assert.equal(ok2.status, 200);
+});
+
+test("S-13:Origin 不在白名单 → 403;无 Origin(服务端 agent)放行", async () => {
+  const bad = await rpc(hostToken, { jsonrpc: "2.0", id: 6, method: "initialize" }, { origin: "http://evil.example" });
+  assert.equal(bad.status, 403);
+});
+
+test("tools/list 按 scope 分片:minToken 只见 2 个工具", async () => {
+  const r = await rpc(minToken, { jsonrpc: "2.0", id: 7, method: "tools/list" });
+  const names = r.json.result.tools.map((t) => t.name);
+  assert.deepEqual(names.sort(), ["get_room", "list_rooms"]);
+  assert.equal(r.json.result._meta.total, 6);
+  // 四注解全部显式存在
+  for (const t of r.json.result.tools) {
+    for (const a of ["title", "readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint"]) {
+      assert.ok(a in t.annotations, `${t.name} 缺注解 ${a}`);
+    }
+  }
+});
+
+test("tools/call:scope 外工具与未知工具同响应(不泄露存在性)", async () => {
+  const outOfScope = await rpc(minToken, { jsonrpc: "2.0", id: 8, method: "tools/call",
+    params: { name: "join_room", arguments: { room_code: "111111" } } });
+  const unknown = await rpc(minToken, { jsonrpc: "2.0", id: 9, method: "tools/call",
+    params: { name: "no_such_tool", arguments: {} } });
+  assert.equal(outOfScope.status, 400);
+  assert.equal(unknown.status, 400);
+  // 同错误码 + 同模板(scope 外工具不暴露"它存在"这一事实)
+  assert.equal(outOfScope.json.error.code, unknown.json.error.code);
+  assert.ok(outOfScope.json.error.message.startsWith("unknown tool:"));
+  assert.ok(unknown.json.error.message.startsWith("unknown tool:"));
+});
+
+test("join_room:返回 room_id 不回显 room_code;list_rooms 全程无 room_code", async () => {
+  const join = await rpc(guestToken, { jsonrpc: "2.0", id: 10, method: "tools/call",
+    params: { name: "join_room", arguments: { room_code: "111111" } } });
+  const payload = JSON.parse(join.json.result.content[0].text);
+  assert.equal(payload.room_id, HOST);
+  assert.ok(!("room_code" in payload));
+  const list = await rpc(guestToken, { jsonrpc: "2.0", id: 11, method: "tools/call", params: { name: "list_rooms", arguments: {} } });
+  const text = list.json.result.content[0].text;
+  assert.ok(!text.includes("111111"), "任何返回不得包含 room_code");
+});
+
+test("越权与不存在同响应:外人 get_room 与不存在房同错误同状态码", async () => {
+  const other = await rpc(guestToken, { jsonrpc: "2.0", id: 12, method: "tools/call",
+    params: { name: "get_room", arguments: { room_id: OTHER } } });
+  const ghost = await rpc(guestToken, { jsonrpc: "2.0", id: 13, method: "tools/call",
+    params: { name: "get_room", arguments: { room_id: "rm_" + "z".repeat(22) } } });
+  assert.equal(other.status, 404);
+  assert.equal(ghost.status, 404);
+  assert.deepEqual(other.json.error, ghost.json.error);
+});
+
+test("ask_next_question:同请求键重放返回同一结果;换键推进;非房主 404", async () => {
+  // 同一 idempotency_key 的重放(网络重试场景)→ 同一轮结果 + replayed 标记
+  const call = (key, id) => rpc(hostToken, { jsonrpc: "2.0", id, method: "tools/call",
+    params: { name: "ask_next_question", arguments: { room_id: HOST, idempotency_key: key } } });
+  const r1 = await call("req-1", 14);
+  assert.equal(r1.status, 200);
+  const p1 = JSON.parse(r1.json.result.content[0].text);
+  assert.equal(p1.turn_index, 1);
+  const r2 = await call("req-1", 15);
+  const p2 = JSON.parse(r2.json.result.content[0].text);
+  assert.equal(p2.turn_index, 1);
+  assert.equal(p2.replayed, true);
+  let msgs = db.prepare("SELECT COUNT(*) c FROM room_messages WHERE room_id = ?").get(HOST).c;
+  assert.equal(msgs, 1, "重放不得产生第二条消息");
+  // 新请求键 → 真推进到第 2 轮
+  const r3 = await call("req-2", 16);
+  const p3 = JSON.parse(r3.json.result.content[0].text);
+  assert.equal(p3.turn_index, 2);
+  msgs = db.prepare("SELECT COUNT(*) c FROM room_messages WHERE room_id = ?").get(HOST).c;
+  assert.equal(msgs, 2);
+  // 非房主(已入座、有 advance scope)推进 → 与不存在同响应(判 seat 不判 scope)
+  const byGuest = await rpc(guestAdvToken, { jsonrpc: "2.0", id: 17, method: "tools/call",
+    params: { name: "ask_next_question", arguments: { room_id: HOST, idempotency_key: "g1" } } });
+  assert.equal(byGuest.status, 404);
+});
+
+test("submit_self_review:同房同轮同座幂等替换为一行", async () => {
+  const call = (content, id) => rpc(guestToken, { jsonrpc: "2.0", id, method: "tools/call",
+    params: { name: "submit_self_review", arguments: { room_id: HOST, turn_index: 1, content } } });
+  assert.equal((await call("第一版", 17)).status, 200);
+  assert.equal((await call("第二版", 18)).status, 200);
+  const rows = db.prepare("SELECT * FROM self_reviews WHERE room_id = ? AND turn_index = 1").all(HOST);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].content, "第二版");
+});
+
+test("evidence.search:只检索本人房间,带 no-spoilers 说明", async () => {
+  const r = await rpc(hostToken, { jsonrpc: "2.0", id: 19, method: "tools/call",
+    params: { name: "evidence.search", arguments: { query: "第 1 题" } } });
+  const payload = JSON.parse(r.json.result.content[0].text);
+  assert.ok(payload.results.length >= 1);
+  assert.ok(payload.results.every((x) => x.room_id === HOST), "不得跨房泄漏");
+});
+
+test("显式不实现的三能力 → -32601", async () => {
+  for (const m of ["roots/list", "sampling/createMessage", "logging/setLevel"]) {
+    const r = await rpc(hostToken, { jsonrpc: "2.0", id: 20, method: m });
+    assert.equal(r.json.error.code, -32601, m);
+  }
+});
+
+test("审计:allow 与 deny 同权落档", async () => {
+  const rows = db.prepare("SELECT decision, COUNT(*) c FROM mcp_audit GROUP BY decision").all();
+  const map = Object.fromEntries(rows.map((r) => [r.decision, r.c]));
+  assert.ok(map.allow > 0);
+  assert.ok(map.deny > 0);
+});

@@ -1,0 +1,45 @@
+{
+  "$schema_note": "题库来源与许可台账 —— G12 门禁的数据源。诚实声明优先于完备:宁可标注 unverified,不编造 provenance。",
+  "work": "trialroom",
+  "updated_at": "2026-10-27",
+  "base_questionbank": {
+    "count": 808,
+    "provenance": "unverified",
+    "statement": "基座 808 题为历史题库,零 provenance 记录,无法证明原创(11-final-plan §2.2 第 5 条)。参评材料不得称『我们的 808 题』;应表述为『基座 808 题为历史题库,Pro 轨新制题带完整判据链』。",
+    "risk_register": [
+      "政策类题目若含官方文件逐字引用,需改写或删除(定时炸弹 1)",
+      "UGC 爬取来源的题目受原平台 ToS 约束,发布前需逐题清理或重写(定时炸弹 2)",
+      "diagrams/ 若混入 GPL 来源内容将触发全产品 copyleft,引入任何图示前必须核源(定时炸弹 3)"
+    ]
+  },
+  "new_track": {
+    "count": 0,
+    "provenance": "none-yet",
+    "statement": "Pro 轨新制题(目标 116 题带 rubricHints 与判据链)尚未开工;开工后逐题登记 author/date/sources 为空。"
+  },
+  "content_domain_whitelist": {
+    "example.com": "占位域名(RFC 2606),题面示例",
+    "www.example.com": "占位域名,题面示例",
+    "api.example.com": "占位域名,题面示例",
+    "registry.example.com": "占位域名,题面示例",
+    "test.com": "占位域名,题面示例",
+    "api.test.com": "占位域名,题面示例",
+    "backend": "题面代码中的服务名占位,非真实域名",
+    "evil": "安全题示例攻击者域名占位,非真实域名",
+    "oapi.dingtalk.com": "安全题( webhook 泄露)题面引用的真实端点;仅作为文本出现,应用永不请求"
+  },
+  "forbidden_corpora": [
+    {
+      "name": "hello-agents",
+      "license": "CC BY-NC-SA 4.0",
+      "rule": "零复制(ND 相邻条款 + 与 MIT 分发冲突);G12 的 12-gram 重合检测在提供参照语料后启用(REFERENCE_CORPUS_DIR)",
+      "local_copy": "无"
+    }
+  ],
+  "permitted_corpora": [
+    { "name": "AIMLInterviews", "license": "MIT", "rule": "可引用,保留版权声明" },
+    { "name": "interviewer-mcp", "license": "MIT", "rule": "可引用,保留版权声明" },
+    { "name": "HelloGGX", "license": "Apache-2.0", "rule": "可引用,保留 NOTICE" },
+    { "name": "clover-public", "license": "MIT", "rule": "可引用,保留版权声明" }
+  ]
+}

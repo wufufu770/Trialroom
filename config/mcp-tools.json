@@ -1,0 +1,54 @@
+{
+  "$comment": "A 期 MCP 工具冻结件(11-final-plan §3.3.2/§3.3.4)。四注解在所有工具上显式给出(只读工具显式 false)。G11 门禁校验本文件与实现一致;变更须走 ADR。工具上限 12(G24)。",
+  "server": {
+    "name": "trialroom",
+    "version": "0.1.0",
+    "protocol_version": "2026-07-28",
+    "aud_default": "https://trialroom.example/mcp"
+  },
+  "scopes": ["rooms:read", "rooms:join", "rooms:advance", "self_review", "evidence:read"],
+  "tools": [
+    {
+      "name": "list_rooms",
+      "description": "列出当前主体有座位的房间(返回 room_id,永不返回 room_code)",
+      "scope": "rooms:read",
+      "annotations": { "title": "列出我的房间", "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
+      "input": {}
+    },
+    {
+      "name": "get_room",
+      "description": "房间详情与座位(仅限本人有座位的房间;越权与不存在同响应)",
+      "scope": "rooms:read",
+      "annotations": { "title": "查看房间", "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
+      "input": { "room_id": "string" }
+    },
+    {
+      "name": "join_room",
+      "description": "凭 6 位 room_code 入座(返回 room_id;room_code 仅作入座凭证不回显)",
+      "scope": "rooms:join",
+      "annotations": { "title": "入座", "readOnlyHint": false, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
+      "input": { "room_code": "string" }
+    },
+    {
+      "name": "ask_next_question",
+      "description": "推进到下一题(仅房主座位可推进;服务端幂等,同轮重放返回同一结果)",
+      "scope": "rooms:advance",
+      "annotations": { "title": "推进下一题", "readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": false },
+      "input": { "room_id": "string" }
+    },
+    {
+      "name": "submit_self_review",
+      "description": "提交本轮自评(仅本人座位;同房同轮同座幂等替换)",
+      "scope": "self_review",
+      "annotations": { "title": "提交自评", "readOnlyHint": false, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
+      "input": { "room_id": "string", "turn_index": "number", "content": "string" }
+    },
+    {
+      "name": "evidence.search",
+      "description": "检索本人房间的证据区(消息与自评);结果只作证据,不参与评分结论",
+      "scope": "evidence:read",
+      "annotations": { "title": "证据检索", "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true },
+      "input": { "query": "string", "room_id": "string?" }
+    }
+  ]
+}
