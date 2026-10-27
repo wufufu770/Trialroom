@@ -6,6 +6,7 @@
 import express from "express";
 import { getDb } from "./db.mjs";
 import { ensureAdminFromEnv } from "./auth.mjs";
+import { createRateLimiter } from "../rateLimiter.js";
 import * as payment from "./routes/payment.mjs";
 import * as roomsRoutes from "./routes/rooms.mjs";
 import { trackEvent } from "./rooms.mjs";
@@ -19,17 +20,20 @@ export function mountPlatform(app) {
   app.use("/api/platform", payment.router);
   app.use("/api/platform", roomsRoutes.router);
 
+  // 根作用域公开端点的独立限流(审查 F6/P0-1:此前 /track、/pay、/mcp 全部零限流)
+  const publicLimiter = createRateLimiter({ windowMs: 60_000, max: 30, label: "public-root" });
+
   // 支付宝异步通知:form-urlencoded 原文留存(req.rawBody)→ RSA2 验签。
   // 公开端点:鉴权即签名本身;G06 白名单显式登记(作用域豁免审计制)。
   const rawBodyParser = express.urlencoded({
     extended: false,
     verify: (req, _res, buf) => { req.rawBody = buf.toString("utf8"); },
   });
-  app.post("/pay/alipay/notify", ...payment.notifyHandler(rawBodyParser));
+  app.post("/pay/alipay/notify", publicLimiter, ...payment.notifyHandler(rawBodyParser));
 
   // 匿名埋点(落地页 landing_uv 等无 token 场景):公开端点,G06 白名单登记;
   // 事件名白名单在 trackEvent 内校验,内容上限 2KB,不落 PII(user_hash 为匿名哈希)。
-  app.post("/track", express.json({ limit: "8kb" }), (req, res) => {
+  app.post("/track", publicLimiter, express.json({ limit: "8kb" }), (req, res) => {
     const r = trackEvent({
       event: req.body?.event,
       userHash: req.body?.user_hash ?? null,
@@ -41,6 +45,7 @@ export function mountPlatform(app) {
     res.status(202).json({ ok: true });
   });
 
-  // MCP:同挂载内 auth 在前、router 在后(G06 的 PASS 形态)
-  app.use("/mcp", mcpAuthMiddleware, mcpRouter);
+  // MCP:限流(审查 P0-1:join_room 可 74 分钟枚举 10^6 房号)→ 同挂载内 auth 在前
+  // (G06 的 PASS 形态;限流中间件在鉴权前,保护 DB 免受未认证请求打审计表)
+  app.use("/mcp", createRateLimiter({ windowMs: 60_000, max: 30, label: "mcp" }), mcpAuthMiddleware, mcpRouter);
 }

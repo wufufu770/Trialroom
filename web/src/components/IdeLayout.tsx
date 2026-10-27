@@ -234,7 +234,7 @@ export function IdeLayout() {
                     )}
                     <Icon size={20} />
                     <span className="pointer-events-none absolute left-12 z-50 whitespace-nowrap bg-ide-bg-active px-2 py-1 text-xs text-ide-fg opacity-0 transition-opacity group-hover:opacity-100 rtl:left-auto rtl:right-12">
-                      {t(labelKey)}
+                      {labelKey ? t(labelKey) : label}
                     </span>
                   </>
                 )}

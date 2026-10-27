@@ -38,11 +38,12 @@ mcpRouter.get("/", (req, res) => {
 
 mcpRouter.post("/", express.json({ limit: "256kb" }), (req, res) => {
   const db = getDb();
+  const clip = (v) => String(v ?? "").slice(0, 64); // 审计字段截断(审查 P0-2:超长 method/tool 灌库)
   const audit = (decision, extra = {}) =>
     db.prepare(`INSERT INTO mcp_audit (id, token_id, decision, deny_reason, method, tool_name, principal, latency_ms)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(genId("aud"), req.mcp?.token_id ?? null, decision, extra.deny_reason ?? null,
-        extra.method ?? null, extra.tool ?? null, req.mcp?.user_id ?? null, extra.ms ?? null);
+        clip(extra.method), clip(extra.tool), req.mcp?.user_id ?? null, extra.ms ?? null);
 
   const fail = (http, code, message, extra = {}) => {
     audit("deny", { deny_reason: extra.reason ?? String(code), method: req.body?.method, tool: req.body?.params?.name });

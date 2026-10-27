@@ -23,7 +23,12 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const INDEX = path.join(ROOT, "server", "index.js");
+// 多文件扫描(审查 F1:此前只扫 index.js,platform/index.mjs 的全部挂载是盲区;
+// mountPlatform(app) 内的 app.use 逃过检查)。auth 作用域按文件序跨文件携带。
+const SCAN_FILES = [
+  path.join(ROOT, "server", "index.js"),
+  path.join(ROOT, "server", "platform", "index.mjs"),
+];
 const IS_MAIN = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 
 // ---- 纯函数核心(供测试与合成回归复用) ------------------------------------
@@ -151,8 +156,8 @@ export function evaluateMounts(mounts) {
         authedScopes.push({ scope: m.scope, mids: m.mids, line: m.line });
         continue; // 鉴权挂载本身不是被保护对象
       }
-      // 路由型挂载:中间件列表里出现 Router 变量(xxxRouter)
-      if (/Router\b|[Rr]outer\)/.test(m.mids ?? "")) {
+      // 路由型挂载:末尾实参 token 是 router/Router(含属性式 payment.router,审查 F2)
+      if (/[A-Za-z_$.)]*[Rr]outer\b/.test(m.mids ?? "")) {
         const covered = authedScopes.some((a) => covers(a.scope, m.scope) && classMatches(a.mids, m.scope));
         if (!covered) {
           violations.push({
@@ -188,7 +193,10 @@ const REGRESSION_SAMPLES = [
   ["基线:/api auth 在前 + 路由在后", `app.use("/api", authMiddleware);\napp.get("/api/agents", h);`, false],
   ["绕过1:路由在 auth 之前", `app.get("/api/agents", h);\napp.use("/api", authMiddleware);`, true],
   ["绕过2:mcp router 无 auth", `app.use("/api", authMiddleware);\napp.use("/mcp", mcpRouter);`, true],
+  ["绕过2b:属性式 router 挂载无 auth(payment.router 形态)", `app.use("/secret", payment.router);`, true],
+  ["绕过2c:platform 文件里的裸路由", `app.get("/internal/export", h);`, true],
   ["通过:mcp 同挂载内 auth 在前", `app.use("/mcp", mcpAuthMiddleware, mcpRouter);`, false],
+  ["通过:mcp 挂载带限流前缀 + auth + router", `app.use("/mcp", createRateLimiter({ max: 30 }), mcpAuthMiddleware, mcpRouter);`, false],
   ["通过:mcp 先 auth 后 router 分挂", `app.use("/mcp", mcpAuthMiddleware);\napp.use("/mcp", mcpRouter);`, false],
   ["绕过3:/api auth 罩不住 /mcp", `app.use("/api", authMiddleware);\napp.use("/mcp", (req,res,next)=>next());\napp.post("/mcp/x", h);`, true],
   ["绕过4:根作用域 router 无 auth", `app.use("/", rootRouter);`, true],
@@ -217,7 +225,12 @@ function runRegression() {
 // ---- CLI(仅作为主模块执行时) --------------------------------------------
 if (IS_MAIN) {
   const [, , targetFile] = process.argv;
-  const violations = evaluateMounts(parseMounts(fs.readFileSync(targetFile ?? INDEX, "utf8")));
+  const files = targetFile ? [path.resolve(targetFile)] : SCAN_FILES;
+  // 逐文件解析并按文件序拼接(auth 作用域跨文件携带:index.js 的 /api auth
+  // 依然罩住 platform/index.mjs 里后注册的同前缀路由)
+  let allMounts = [];
+  for (const f of files) allMounts = allMounts.concat(parseMounts(fs.readFileSync(f, "utf8")));
+  const violations = evaluateMounts(allMounts);
 
   const regFailed = runRegression();
   if (regFailed > 0) {
@@ -229,5 +242,5 @@ if (IS_MAIN) {
     for (const v of violations) console.error(`  server/index.js:${v.line}  ${v.why}`);
     process.exit(1);
   }
-  console.log("G06 鉴权作用域覆盖:通过(含 14 条合成绕过回归全绿)");
+  console.log(`G06 鉴权作用域覆盖:通过(含 ${REGRESSION_SAMPLES.length} 条合成绕过回归全绿,扫描 ${files.length} 个文件)`);
 }

@@ -2,6 +2,7 @@
 // P8b(platform)。页面文案为中文硬编码(平台层新增功能,暂不进 i18n key 体系)
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { getApiToken } from "@/api/client";
 import { platformApi, getPlatformToken, setPlatformToken, fenToYuan, track, PlatformProduct, PlatformOrder, PlatformRoom } from "@/api/platform";
 
 type Tab = "checkout" | "rooms" | "review" | "token";
@@ -60,8 +61,14 @@ function CheckoutTab() {
       const key = `${code}:${Date.now().toString(36)}`; // 幂等键:本会话本次点击
       const order = await platformApi.createOrder(code, key);
       if (order.pay_form) {
-        // 真实支付:注入支付宝自提交表单(当前页面跳转)
-        document.open(); document.write(order.pay_form); document.close();
+        // 真实支付:后端产出的自提交表单挂到独立容器再提交,不 document.write
+        // 替换整文档(审查 F6:SPA 状态/历史全毁,且是"服务端字符串→同源脚本"直通管道)
+        const holder = document.createElement("div");
+        holder.innerHTML = order.pay_form;
+        document.body.appendChild(holder);
+        const form = holder.querySelector("form");
+        if (form) { form.submit(); return; }
+        setNotice("支付表单异常,请联系管理员");
         return;
       }
       const paid = await platformApi.mockPay(order.order_no);
@@ -135,7 +142,17 @@ function RoomsTab({ initialCode }: { initialCode: string }) {
         <div className="border border-ide-success bg-ide-success/10 p-3">
           房间号:<span className="text-lg text-ide-accent">{created.room_code}</span>
           <span className="ml-3 text-xs text-ide-fg-muted">room_id:{created.room_id}</span>
-          <a className="ml-3 text-xs text-ide-accent underline" href={`#/welcome?code=${created.room_code}`}>复制邀请链接</a>
+          <button
+            className="ml-3 border border-ide-accent px-2 py-0.5 text-xs text-ide-accent hover:bg-ide-accent hover:text-ide-bg"
+            onClick={() => {
+              const url = `${location.origin}/welcome?code=${created.room_code}`;
+              navigator.clipboard?.writeText(url).then(
+                () => setNotice("邀请链接已复制:" + url),
+                () => setNotice("复制失败,请手动复制:" + url),
+              );
+            }}>
+            复制邀请链接
+          </button>
         </div>
       )}
       {notice && <div className="text-xs text-ide-warning">{notice}</div>}
@@ -162,25 +179,32 @@ function ReviewTab() {
   const [right, setRight] = useState<any>(null);
   const [err, setErr] = useState("");
 
-  // 拉基座会话列表,取最近两条可对照(纯前端并排展示)
-  useEffect(() => {
-    fetch("/api/sessions", { headers: { authorization: `Bearer ${localStorage.getItem("tryout:api_token") ?? ""}` } })
-      .then(r => r.json())
-      .then(j => {
-        const list = (j.data ?? j ?? []).slice(0, 2);
-        if (list[0]) setA(list[0].id);
-        if (list[1]) setB(list[1].id);
-      })
-      .catch(() => setErr("需要先在设置页配置基座访问 token 才能读取会话"));
-  }, []);
+  // 基座会话 token 从 client 的 getApiToken 取(sessionStorage,审查 F4:
+  // 此前直读 localStorage 永远 null,复盘对照恒 401)
+  const authHeaders = (): Record<string, string> => {
+    const token = getApiToken();
+    return token ? { authorization: `Bearer ${token}` } : {};
+  };
+  const loadSessions = async () => {
+    try {
+      const res = await fetch("/api/sessions", { headers: authHeaders() });
+      if (!res.ok) return setErr(`读取会话失败(${res.status}):需要先在设置页配置访问 token`);
+      const j = await res.json();
+      const list = (Array.isArray(j) ? j : j.data ?? []).slice(0, 2);
+      if (list[0]) setA(list[0].id);
+      if (list[1]) setB(list[1].id);
+    } catch (e: any) { setErr(e.message); }
+  };
+  useEffect(() => { loadSessions(); }, []);
 
   const load = async (id: string, setter: (v: any) => void) => {
     if (!id) return setter(null);
     try {
-      const r = await fetch(`/api/sessions/${id}`, { headers: { authorization: `Bearer ${localStorage.getItem("tryout:api_token") ?? ""}` } });
-      const j = await r.json();
+      const res = await fetch(`/api/sessions/${id}`, { headers: authHeaders() });
+      if (!res.ok) return setter(null);
+      const j = await res.json();
       setter(j.data ?? j);
-    } catch (e: any) { setErr(e.message); }
+    } catch { setter(null); }
   };
   useEffect(() => { load(a, setLeft); load(b, setRight); }, [a, b]);
 

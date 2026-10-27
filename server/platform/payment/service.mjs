@@ -41,7 +41,12 @@ export function createOrder({ userId, productCode, idempotencyKey = null, provid
       .run(orderNo, userId, product.code, product.name, product.amount_fen, provider, source, idem, internal ? 1 : 0);
   } catch (e) {
     if (String(e.message).includes("UNIQUE") && idem) {
-      return db.prepare("SELECT * FROM orders WHERE idempotency_key = ?").get(idem);
+      const prior = db.prepare("SELECT * FROM orders WHERE idempotency_key = ?").get(idem);
+      // 同 key 不同商品/用户是客户端串单错误,不得静默返回旧单(审查 P2-6)
+      if (prior && (prior.product_code !== productCode || prior.user_id !== userId)) {
+        throw Object.assign(new Error("idempotency key 已绑定其他商品/用户"), { status: 409 });
+      }
+      return prior;
     }
     throw e;
   }
@@ -71,6 +76,16 @@ export function markPaid(orderNo, { tradeNo = null, buyerAccountHash = null, buy
       buyer_realname_digest=? WHERE order_no=? AND status IN ('created','pending')`)
       .run(tradeNo, nowIso(), buyerAccountHash, buyerRealnameDigest, orderNo);
     if (db.prepare("SELECT changes() AS c").get().c === 0) return; // 并发重放,由幂等返回
+    // 首单唯一性的支付期复查:idx_first_order_paid 部分唯一索引是原子兜底,
+    // 此处显式拦截给出可解释错误(审查 P0-1:多张未付首单顺序结清的绕过路径)
+    if (product.first_only) {
+      const dup = db.prepare(`SELECT order_no FROM orders
+        WHERE user_id = ? AND product_code = 'first_order_001' AND status = 'paid' AND order_no != ?
+        LIMIT 1`).get(order.user_id, orderNo);
+      if (dup) {
+        throw Object.assign(new Error("首单档位每人限一次(存在已支付首单)"), { status: 409 });
+      }
+    }
     event(db, orderNo, "paid", { trade_no: tradeNo, amount_fen: order.amount_fen });
     const entId = genId("ent");
     db.prepare(`INSERT INTO entitlements (id, user_id, order_no, kind, quota_total, valid_until)
@@ -78,12 +93,21 @@ export function markPaid(orderNo, { tradeNo = null, buyerAccountHash = null, buy
       .run(entId, order.user_id, orderNo, product.kind, product.quota ?? 0, until);
     db.prepare("INSERT INTO entitlement_ledger (id, entitlement_id, delta, reason, ref) VALUES (?, ?, ?, 'grant', ?)")
       .run(genId("elf"), entId, product.quota ?? 1, orderNo);
-    if (order.product_code === "first_order_001") {
+    // 内控单不产生 first_pay 埋点(审查 F5:mock 自测污染漏斗)
+    if (order.product_code === "first_order_001" && !order.is_internal_verification) {
       db.prepare("INSERT INTO funnel_events (id, event, user_hash) VALUES (?, 'first_pay', ?)")
         .run(genId("fev"), buyerAccountHash ?? order.user_id);
     }
   });
-  tx();
+  try {
+    tx();
+  } catch (e) {
+    // 部分唯一索引 idx_first_order_paid 的原子拒绝也归一为 409(审查 P0-1)
+    if (product.first_only && String(e.message).includes("UNIQUE")) {
+      throw Object.assign(new Error("首单档位每人限一次(唯一索引拒绝)"), { status: 409 });
+    }
+    throw e;
+  }
   return { order: getOrder(orderNo), granted: true };
 }
 

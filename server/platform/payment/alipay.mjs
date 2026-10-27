@@ -103,6 +103,11 @@ export function buildPagePayForm({ outTradeNo, amountFen, subject, body = "" }) 
 export function verifyNotify(rawParams, expectedOrder) {
   const p = { ...rawParams };
   if (!rsa2Verify(p)) return { ok: false, reason: "SIGN_INVALID" };
+  // 归属核验(审查 P2-4):合法签名必须来自本应用 —— 防商户名下其他应用/沙箱
+  // 网关的同签名通知被用来给我方订单入账
+  if (process.env.ALIPAY_APP_ID && p.app_id !== process.env.ALIPAY_APP_ID) {
+    return { ok: false, reason: "APP_ID_MISMATCH" };
+  }
   const statusWhitelist = new Set(["TRADE_SUCCESS", "TRADE_FINISHED"]);
   if (!statusWhitelist.has(p.trade_status)) return { ok: false, reason: `STATUS_${p.trade_status}` };
   if (p.out_trade_no !== expectedOrder.order_no) return { ok: false, reason: "OUT_TRADE_NO_MISMATCH" };

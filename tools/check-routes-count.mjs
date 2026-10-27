@@ -8,10 +8,15 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const MIN = Number(process.env.G07_MIN_ROUTES ?? 70);
+// 下限校准说明:注释剥离(审查 F7)前的历史计数 82 含 15 条被注释的旧路由,
+// 诚实基线为 67(2026-10-27 实测:index 48 + analysis 7 + payment 5 + rooms 7)。
+// 下限 = 当前基线,任何一条路由被静默删除即红;新增路由后应上调而非下调。
+const MIN = Number(process.env.G07_MIN_ROUTES ?? 67);
 
 function countFile(file, re) {
-  const src = fs.readFileSync(file, "utf8");
+  const src = fs.readFileSync(file, "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, "")    // 块注释(审查 F7:注释里的路由不得计数)
+    .replace(/^\s*\/\/.*$/gm, "");       // 行注释
   return [...src.matchAll(re)].length;
 }
 

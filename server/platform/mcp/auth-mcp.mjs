@@ -21,11 +21,13 @@ export function mcpAuthMiddleware(req, res, next) {
   // GET /mcp = server/discover 公开元数据卡(等价 /api/health 的探活豁免:
   // 无业务数据、无工具细节;真正的授权强制点在 tools/call)。
   if (req.method === "GET" && req.path === "/") return next();
+  // 审计字段统一截断(审查 P0-2:未认证请求可用 1MB method 灌库)
+  const clip = (v) => String(v ?? "").slice(0, 64);
   const audit = (decision, extra = {}) => {
     db.prepare(`INSERT INTO mcp_audit (id, token_id, decision, deny_reason, method, tool_name, principal, ip)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(genId("aud"), extra.token_id ?? null, decision, extra.deny_reason ?? null,
-        extra.method ?? null, extra.tool_name ?? null, extra.principal ?? null, req.ip ?? null);
+        clip(extra.method), clip(extra.tool_name), extra.principal ?? null, clip(req.ip));
   };
   const m = (req.headers.authorization || "").match(/^Bearer\s+(.+)$/i);
   const rpcFail = (code, message, httpStatus, denyReason) => {
@@ -38,6 +40,9 @@ export function mcpAuthMiddleware(req, res, next) {
   if (!row) return rpcFail(-32001, "MCP token 无效", 401, "AUTH_INVALID");
   if (row.revoked_at) return rpcFail(-32001, "MCP token 已吊销", 401, "REVOKED");
   if (row.expires_at && row.expires_at < nowIso()) return rpcFail(-32001, "MCP token 已过期", 401, "EXPIRED");
+  // aud 受众校验(审查 P1:签发存储却从未比对 —— 为其他受众泄露的 token 不得在本端点可用)
+  const expectedAud = process.env.MCP_AUD ?? "https://trialroom.example/mcp";
+  if (row.aud !== expectedAud) return rpcFail(-32001, "MCP token 受众不匹配", 401, "AUD_MISMATCH");
   req.mcp = {
     token_id: row.token_id, user_id: row.user_id, client_id: row.client_id,
     scopes: JSON.parse(row.scopes), aud: row.aud,

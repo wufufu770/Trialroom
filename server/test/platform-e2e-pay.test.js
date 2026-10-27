@@ -1,4 +1,6 @@
 // P7 · 平台支付链路 HTTP 端到端(mock 轨):dev-token → 下单 → mock 支付 → 统计 → 权益消耗
+process.env.TRIALROOM_DEV = "1"; // 对抗加固后 dev 引导默认拒绝,测试显式开启
+process.env.TRIALROOM_ADMIN_TOKEN = "admin-token-for-e2e";
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";

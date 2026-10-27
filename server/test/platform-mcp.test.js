@@ -191,3 +191,55 @@ test("审计:allow 与 deny 同权落档", async () => {
   assert.ok(map.allow > 0);
   assert.ok(map.deny > 0);
 });
+
+// ── 对抗加固回归(2026-10-27 四席审查) ────────────────────────────────────
+test("aud 受众不匹配的 token → 401(为其他受众泄露的 token 不可用)", async () => {
+  db.prepare("INSERT INTO mcp_tokens (token_id, token_hash, user_id, scopes, aud) VALUES ('tk_aud', ?, 'u_host', '[\"rooms:read\"]', 'https://other-app.example/mcp')")
+    .run(sha256Hex("mt_wrong_aud"));
+  const r = await rpc("mt_wrong_aud", { jsonrpc: "2.0", id: 30, method: "initialize" });
+  assert.equal(r.status, 401);
+  const denyRow = db.prepare("SELECT deny_reason FROM mcp_audit WHERE deny_reason='AUD_MISMATCH' ORDER BY created_at DESC").get();
+  assert.ok(denyRow, "deny 审计必须落 AUD_MISMATCH");
+});
+
+test("submit_self_review:turn_index 非法值(1.5/-3/1e9/'abc')全部 -32602 拒绝", async () => {
+  for (const bad of [1.5, -3, 1e9, "abc", null]) {
+    const r = await rpc(guestToken, { jsonrpc: "2.0", id: 31, method: "tools/call",
+      params: { name: "submit_self_review", arguments: { room_id: HOST, turn_index: bad, content: "x" } } });
+    assert.equal(r.status, 400, `turn_index=${JSON.stringify(bad)} 应被校验拒绝`);
+    assert.equal(r.json.error.code, -32602);
+  }
+});
+
+test("ask_next_question:reserved 占位冲突 → -32005,不重复推进", async () => {
+  db.prepare(`INSERT INTO idempotency_keys (key, principal, operation, status, expires_at)
+    VALUES (?, 'u_host', 'ask_next_question', 'reserved', '2099-01-01T00:00:00Z')`)
+    .run(`mcp:u_host:ask_next_question:${HOST}:stuck-key`);
+  const r = await rpc(hostToken, { jsonrpc: "2.0", id: 32, method: "tools/call",
+    params: { name: "ask_next_question", arguments: { room_id: HOST, idempotency_key: "stuck-key" } } });
+  assert.equal(r.status, 400);
+  assert.equal(r.json.error.code, -32005);
+});
+
+test("evidence.search:通配符 % 与 _ 被转义,不再全文拖取", async () => {
+  const seat = db.prepare("SELECT id FROM room_seats WHERE room_id = ? AND user_id = 'u_host'").get(HOST);
+  db.prepare("INSERT INTO room_messages (id, room_id, seat_id, turn_index, role, content) VALUES (?, ?, ?, 900, 'system', '负载 100% 的字面百分号')")
+    .run("msg_pct", HOST, seat.id);
+  const r = await rpc(hostToken, { jsonrpc: "2.0", id: 33, method: "tools/call",
+    params: { name: "evidence.search", arguments: { query: "%" } } });
+  const payload = JSON.parse(r.json.result.content[0].text);
+  assert.ok(payload.results.every((x) => x.turn_index === 900), "query=% 只能命中含字面 % 的行");
+});
+
+test("join_room 错码锁定:连续 10 次错码后第 11 次即使码对也拒绝", async () => {
+  db.prepare("INSERT OR IGNORE INTO users (id) VALUES ('u_locktest')").run();
+  const token = mkToken("u_locktest", ["rooms:join"]);
+  for (let i = 0; i < 10; i++) {
+    const bad = await rpc(token, { jsonrpc: "2.0", id: 40 + i, method: "tools/call",
+      params: { name: "join_room", arguments: { room_code: "00000" + i } } });
+    assert.equal(bad.status, 404);
+  }
+  const good = await rpc(token, { jsonrpc: "2.0", id: 60, method: "tools/call",
+    params: { name: "join_room", arguments: { room_code: "111111" } } });
+  assert.equal(good.status, 404, "锁定期正确房号也拒绝(与不存在同响应)");
+});

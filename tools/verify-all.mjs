@@ -52,8 +52,9 @@ function metaCheck() {
 
 // ── 运行器 ────────────────────────────────────────────────────────────────
 function shouldSkip(g) {
-  if (g.needsDocker && !fs.existsSync("/usr/bin/docker") && !spawnSync("docker", ["--version"], { shell: true }).status === 0) {
-    if (spawnSync("docker", ["--version"], { shell: true, stdio: "ignore" }).status !== 0) return "docker 不可用";
+  if (g.needsDocker) {
+    const probe = spawnSync("docker", ["--version"], { shell: true, stdio: "ignore" });
+    if (probe.status !== 0) return "docker 不可用"; // 审查 F8:原写法 !x.status===0 恒 false(死分支)
   }
   if (g.env?.startsWith("TRIALROOM_E2E") && process.env.TRIALROOM_E2E !== "1") {
     return "TRIALROOM_E2E 未开启";

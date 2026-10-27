@@ -8,20 +8,22 @@ export const ROOM_NOT_FOUND = Object.freeze({ status: 404, code: "NOT_FOUND", me
 export function createRoom({ hostUserId, industry = null, position = null }) {
   const db = getDb();
   const roomId = newRoomId();
-  const code = newRoomCode();
-  // 6 位数字空间 10^6:占用率高时换码重试(避免碰撞)
-  for (let i = 0; i < 5; i++) {
+  // 碰撞换码重试:code 必须在循环内重新生成(审查 F1:循环外生成使重试形同虚设)
+  let created = false;
+  for (let i = 0; i < 5 && !created; i++) {
+    const code = newRoomCode();
     try {
       db.prepare("INSERT INTO rooms (room_id, room_code, host_user_id, industry, position) VALUES (?, ?, ?, ?, ?)")
         .run(roomId, code, hostUserId, industry, position);
-      break;
+      created = true;
+      db.prepare("INSERT INTO room_seats (id, room_id, user_id, seat_no, is_host) VALUES (?, ?, ?, 1, 1)")
+        .run(genId("seat"), roomId, hostUserId);
+      return { room_id: roomId, room_code: code }; // code 仅此一次返回给房主
     } catch (e) {
       if (!String(e.message).includes("UNIQUE")) throw e;
     }
   }
-  db.prepare("INSERT INTO room_seats (id, room_id, user_id, seat_no, is_host) VALUES (?, ?, ?, 1, 1)")
-    .run(genId("seat"), roomId, hostUserId);
-  return { room_id: roomId, room_code: code }; // code 仅此一次返回给房主
+  throw Object.assign(new Error("房号空间紧张,创建失败请重试"), { status: 503 });
 }
 
 export function myRooms(userId) {
@@ -35,15 +37,18 @@ export function joinRoom({ userId, roomCode }) {
   const room = db.prepare("SELECT * FROM rooms WHERE room_code = ? AND status != 'closed'")
     .get(String(roomCode ?? ""));
   if (!room) return { error: ROOM_NOT_FOUND };
-  const seat = db.prepare("SELECT * FROM room_seats WHERE room_id = ? AND user_id = ? AND left_at IS NULL")
+  const seat = db.prepare("SELECT * FROM room_seats WHERE room_id = ? AND user_id = ?")
     .get(room.room_id, userId);
-  if (seat) return { room_id: room.room_id, seat_no: seat.seat_no, already_seated: true };
-  const seatCount = db.prepare("SELECT COUNT(*) c FROM room_seats WHERE room_id = ?").get(room.room_id).c;
-  db.prepare("INSERT INTO room_seats (id, room_id, user_id, seat_no, is_host) VALUES (?, ?, ?, ?, 0)")
-    .run(genId("seat"), room.room_id, userId, seatCount + 1);
+  if (seat && !seat.left_at) return { room_id: room.room_id, seat_no: seat.seat_no, already_seated: true };
+  // 原子取号 + 软离开后重入座(审查 F8:裸 INSERT 撞 UNIQUE(room_id,user_id) 会 500)
+  db.prepare(`INSERT INTO room_seats (id, room_id, user_id, seat_no, is_host)
+    VALUES (?, ?, ?, (SELECT COALESCE(MAX(seat_no), 0) + 1 FROM room_seats WHERE room_id = ?), 0)
+    ON CONFLICT(room_id, user_id) DO UPDATE SET left_at = NULL`)
+    .run(genId("seat"), room.room_id, userId, room.room_id);
+  const nowSeat = db.prepare("SELECT seat_no FROM room_seats WHERE room_id = ? AND user_id = ?").get(room.room_id, userId);
   db.prepare("INSERT INTO funnel_events (id, event, user_hash, room_code) VALUES (?, 'room_join', ?, ?)")
     .run(genId("fev"), userId, room.room_code);
-  return { room_id: room.room_id, seat_no: seatCount + 1 };
+  return { room_id: room.room_id, seat_no: nowSeat.seat_no };
 }
 
 export function roomDetail({ roomId, userId }) {
@@ -84,7 +89,9 @@ export function postMessage({ roomId, userId, content, role = "candidate" }) {
 export function trackEvent({ event, userHash = null, sessionTicket = null, roomCode = null, props = {} }) {
   const allowed = new Set(["landing_uv", "practice_start", "practice_complete", "review_view", "first_redo", "first_pay", "room_join", "room_paid_by_invitee"]);
   if (!allowed.has(event)) return { error: { status: 400, code: "VALIDATION", message: `未知事件 ${event}` } };
+  // 匿名端点字段截断(审查 F6:防匿名灌库膨胀)
+  const clip = (v, n) => (v == null ? null : String(v).slice(0, n));
   getDb().prepare("INSERT INTO funnel_events (id, event, user_hash, session_ticket, room_code, props) VALUES (?, ?, ?, ?, ?, ?)")
-    .run(genId("fev"), event, userHash, sessionTicket, roomCode, JSON.stringify(props).slice(0, 2048));
+    .run(genId("fev"), event, clip(userHash, 64), clip(sessionTicket, 64), clip(roomCode, 16), JSON.stringify(props).slice(0, 2048));
   return { tracked: true };
 }

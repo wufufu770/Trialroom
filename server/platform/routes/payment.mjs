@@ -2,7 +2,7 @@
 import express from "express";
 import { PRODUCTS, createOrder, getOrder, markPaid, refundOrder, recordNotification, paidUserStats } from "../payment/service.mjs";
 import { isConfigured, buildPagePayForm, verifyNotify } from "../payment/alipay.mjs";
-import { platformAuth } from "../auth.mjs";
+import { platformAuth, requireScope } from "../auth.mjs";
 import { getDb } from "../db.mjs";
 
 export const router = express.Router();
@@ -11,7 +11,7 @@ router.get("/products", (req, res) => {
   res.json({ ok: true, provider: isConfigured() ? "alipay_web" : "mock", products: Object.values(PRODUCTS) });
 });
 
-router.post("/orders", platformAuth, (req, res) => {
+router.post("/orders", platformAuth, requireScope("platform:write"), (req, res) => {
   const { product_code, idempotency_key } = req.body ?? {};
   const provider = isConfigured() ? "alipay_web" : "mock";
   try {
@@ -37,11 +37,15 @@ router.get("/orders/:orderNo", platformAuth, (req, res) => {
   res.json({ ok: true, order: o });
 });
 
-// 测试通道:仅 mock 态可用;自动打内控标(报表排除)+ 事件留痕。
-router.post("/orders/:orderNo/mock-pay", platformAuth, (req, res) => {
+// 测试通道:仅 mock 态可用;仅接受 mock provider 的 created/pending 订单
+// (审查 P1-2:真实通道订单不得在"未配钥窗口"被 mock 结算)
+router.post("/orders/:orderNo/mock-pay", platformAuth, requireScope("platform:write"), (req, res) => {
   if (isConfigured()) return res.status(409).json({ ok: false, message: "已配置真实支付,测试通道关闭(首单后 24h 纪律)" });
   const o = getOrder(req.params.orderNo);
   if (!o || o.user_id !== req.user.id) return res.status(404).json({ ok: false, message: "订单不存在" });
+  if (o.provider !== "mock" || !["created", "pending"].includes(o.status)) {
+    return res.status(409).json({ ok: false, message: `订单 provider=${o.provider} status=${o.status},不可走测试通道` });
+  }
   const { order } = markPaid(o.order_no, {
     buyerAccountHash: `mock:${req.user.id}`,
     tradeNo: `MOCK${Date.now()}`,
@@ -61,15 +65,27 @@ router.get("/stats/paid", platformAuth, (req, res) => {
 // ── 异步通知(挂根作用域,见 mountPlatform;签名即鉴权) ─────────────────────
 export function notifyHandler(rawBodyParser) {
   return [rawBodyParser, (req, res) => {
+    const failure = (note) => res.type("text").send("failure");
+    // 未配钥窗口直接拒绝(审查 P2-7:normalizePem(undefined) 会抛 500)
+    if (!isConfigured()) return failure();
     const params = typeof req.body === "object" && req.body !== null ? req.body : {};
-    recordNotification({ provider: "alipay_web", rawBody: req.rawBody ?? JSON.stringify(params), verifyOk: false, parsed: null });
+    // 重复表单键解析为数组:一律拒绝(审查 P2-8,任何数组值都是异常流量)
+    if (Object.values(params).some((v) => Array.isArray(v))) {
+      recordNotification({ provider: "alipay_web", rawBody: req.rawBody ?? "", verifyOk: false, parsed: { reason: "ARRAY_PARAM" } });
+      return failure();
+    }
     const order = getOrder(params.out_trade_no);
-    if (!order) return res.type("text").send("failure"); // 不泄露存在性,统一 failure
+    if (!order) {
+      recordNotification({ provider: "alipay_web", rawBody: req.rawBody ?? "", verifyOk: false, parsed: { reason: "ORDER_NOT_FOUND" } });
+      return failure(); // 不泄露存在性,统一 failure
+    }
     const v = verifyNotify(params, order);
     if (!v.ok) {
-      recordNotification({ provider: "alipay_web", rawBody: "", verifyOk: false, parsed: { reason: v.reason } });
-      return res.type("text").send("failure");
+      recordNotification({ provider: "alipay_web", rawBody: req.rawBody ?? "", verifyOk: false, parsed: { reason: v.reason } });
+      return failure();
     }
+    // 验签成功也留档(审查 P2-5:争议回放需要 verify_ok=1 的证据行)
+    recordNotification({ provider: "alipay_web", rawBody: req.rawBody ?? "", verifyOk: true, parsed: v });
     markPaid(order.order_no, {
       tradeNo: v.trade_no,
       buyerAccountHash: v.buyer_id ? `alipay:${v.buyer_id}` : null,

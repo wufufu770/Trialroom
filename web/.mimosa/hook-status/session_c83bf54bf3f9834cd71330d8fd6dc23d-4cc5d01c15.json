@@ -1,14 +1,37 @@
 {
   "schemaVersion": "mimosa-hook-status/v1",
-  "recordedAt": "2026-10-27T00:26:29.873Z",
+  "recordedAt": "2026-10-27T01:09:06.384Z",
   "sessionId": "session_c83bf54bf3f9834cd71330d8fd6dc23d",
-  "event": "PostToolUse",
+  "event": "PreToolUse",
   "toolName": "Edit",
-  "file": "/home/wff/trialroom/server/scripts/calibrate-judge.mjs",
-  "outcome": "clear",
-  "coverage": "complete",
+  "file": "/home/wff/trialroom/server/test/platform-mcp.test.js",
+  "outcome": "inconclusive",
+  "coverage": "partial",
   "findingCount": 0,
-  "durationMs": 8,
-  "hostState": "hook_complete",
+  "durationMs": 1022,
+  "telemetry": {
+    "schemaVersion": "mimosa-gate-telemetry/v1",
+    "profile": "gate",
+    "operation": "PreToolUse",
+    "outcome": "partial/INCONCLUSIVE",
+    "latencyMs": 1022,
+    "peakMemoryBytes": 183652352,
+    "memoryMeasurement": "max-observed-process-rss",
+    "scannedFiles": 1,
+    "cache": {
+      "hits": 0,
+      "misses": 1,
+      "measurement": "not-applicable"
+    },
+    "denyCount": 0,
+    "tokens": {
+      "input": 0,
+      "output": 0,
+      "total": 0,
+      "modelCalls": 0,
+      "measurement": "known-zero"
+    }
+  },
+  "hostState": "hook_complete_waiting_host_tool_decision",
   "reportHint": ".mimosa/reports/"
 }

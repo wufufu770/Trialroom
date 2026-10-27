@@ -17,8 +17,8 @@ const errs = [];
 const need = (cond, msg) => { if (!cond) errs.push(msg); };
 
 const idx = read("server/index.js");
-need(/app\.use\("\/mcp",\s*mcpAuthMiddleware,\s*mcpRouter\)/.test(read("server/platform/index.mjs")),
-  "platform/index.mjs 缺同挂载鉴权形态 app.use(\"/mcp\", mcpAuthMiddleware, mcpRouter)");
+need(/app\.use\("\/mcp",[^;]*mcpAuthMiddleware[^;]*mcpRouter\)/.test(read("server/platform/index.mjs")),
+  "platform/index.mjs 缺同挂载鉴权形态 app.use(\"/mcp\", [限流...,] mcpAuthMiddleware, mcpRouter)");
 need(idx.includes("mountPlatform(app)"), "index.js 缺 mountPlatform(app) 挂载点");
 
 const router = read("server/platform/mcp/router.mjs");
@@ -37,6 +37,8 @@ need(tools.includes("is_host"), "tools.mjs 推进权必须判 seat(is_host) 不�
 
 const nginx = read("docker/nginx.conf");
 need(/location\s+\/mcp\//.test(nginx), "nginx 缺独立 location /mcp/(SPA fallback 会吞掉 /mcp)");
+need(/location\s+=\s+\/mcp\b/.test(nginx), "nginx 缺精确 location = /mcp(挂载根无尾斜杠,审查 F3)");
+need(/location\s+=\s*\/track\b/.test(nginx), "nginx 缺 location = /track(埋点被 SPA 吞,landing_uv 全丢)");
 need(nginx.includes("proxy_set_header Mcp-Method") && nginx.includes("proxy_set_header Mcp-Name"),
   "nginx /mcp/ 必须显式透传 Mcp-* 头(头名大小写敏感)");
 need(/location\s+\/pay\//.test(nginx), "nginx 缺 location /pay/(支付宝异步通知)");
