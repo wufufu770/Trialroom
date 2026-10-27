@@ -9,6 +9,8 @@ export function backupNow() {
   fs.mkdirSync(dir, { recursive: true });
   const stamp = new Date().toISOString().slice(0, 10);
   const target = path.join(dir, `trialroom-${stamp}.db`);
+  // 可重入(R4):VACUUM INTO 不覆盖已存在目标,同日重跑前先删旧快照
+  fs.rmSync(target, { force: true });
   getDb().prepare(`VACUUM INTO ?`).run(target);
   // 轮转:按名排序删最老,只留 7 份
   const all = fs.readdirSync(dir).filter((f) => /^trialroom-\d{4}-\d{2}-\d{2}\.db$/.test(f)).sort();
@@ -19,7 +21,9 @@ export function backupNow() {
 }
 
 export function scheduleBackup(intervalMs = 24 * 3600_000) {
-  const t = setInterval(() => { try { backupNow(); } catch { /* 下个周期重试 */ } }, intervalMs);
+  const t = setInterval(() => {
+    try { backupNow(); } catch (e) { console.error("[backup] failed:", e.message); } // 失败留痕,下个周期重试
+  }, intervalMs);
   t.unref();
   return t;
 }

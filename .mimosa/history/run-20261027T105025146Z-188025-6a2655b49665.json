@@ -1,0 +1,44 @@
+{
+  "schemaVersion": "mimosa-finding-history/v1",
+  "runId": "20261027T105025146Z-188025-6a2655b49665",
+  "runStatus": "inconclusive",
+  "errors": [
+    "scan:web/src/api/platform.ts: scanner_failed: spawnSync /usr/bin/node ETIMEDOUT",
+    "scan:server/test/platform-b5.test.js: scanner_failed: spawnSync /usr/bin/node ETIMEDOUT",
+    "scan:server/test/platform-questions.test.js: scanner_failed: spawnSync /usr/bin/node ETIMEDOUT",
+    "scan:web/src/pages/LandingPage.tsx: scanner_failed: spawnSync /usr/bin/node ETIMEDOUT",
+    "scan:web/src/pages/PlatformPage.tsx: scanner_failed: spawnSync /usr/bin/node ETIMEDOUT",
+    "scan:server/test/platform-mcp.test.js: scanner_failed: spawnSync /usr/bin/node ETIMEDOUT"
+  ],
+  "target": ".",
+  "revision": "efa9cdc47a65ac72e4663f546f4aedbd7f2bb24d",
+  "diffHash": "71445ec0713548d57d4d8a23921fa4c5b9408e4db24b0c65796f35d69018a4b7",
+  "rulesVersion": "unavailable",
+  "recordedAt": "2026-10-27T10:50:25.146Z",
+  "timing": {
+    "startedAt": "2026-10-27T10:50:17.534Z",
+    "completedAt": "2026-10-27T10:50:25.146Z",
+    "durationMs": 7612
+  },
+  "tokens": {
+    "input": 0,
+    "output": 0,
+    "total": 0,
+    "modelCalls": 0,
+    "measurement": "known-zero"
+  },
+  "findings": {
+    "total": 0,
+    "bySeverity": {},
+    "byStatus": {}
+  },
+  "coverage": {
+    "status": "partial",
+    "reasonCounts": {
+      "scanner_failed": 6,
+      "project_check_failed": 6
+    }
+  },
+  "evidenceBoundary": "static_only",
+  "immutableReport": ".mimosa/reports/task-review-session_c83bf54bf3f9834cd71330d8fd6dc23d-20261027T105025146Z-188025-6a2655b49665.json"
+}

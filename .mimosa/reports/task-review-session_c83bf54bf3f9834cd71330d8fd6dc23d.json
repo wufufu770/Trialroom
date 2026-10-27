@@ -1,16 +1,36 @@
 {
   "schema_version": "mimosa-task-review/v2",
-  "run_id": "20261027T051233835Z-175666-a98d80c17102",
+  "run_id": "20261027T105025146Z-188025-6a2655b49665",
   "run_status": "inconclusive",
   "errors": [
     {
       "stage": "scan",
-      "target": "server/test/platform-cross.test.js",
+      "target": "web/src/api/platform.ts",
       "reason": "scanner_failed: spawnSync /usr/bin/node ETIMEDOUT"
     },
     {
       "stage": "scan",
-      "target": "server/index.js",
+      "target": "server/test/platform-b5.test.js",
+      "reason": "scanner_failed: spawnSync /usr/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "scan",
+      "target": "server/test/platform-questions.test.js",
+      "reason": "scanner_failed: spawnSync /usr/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "scan",
+      "target": "web/src/pages/LandingPage.tsx",
+      "reason": "scanner_failed: spawnSync /usr/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "scan",
+      "target": "web/src/pages/PlatformPage.tsx",
+      "reason": "scanner_failed: spawnSync /usr/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "scan",
+      "target": "server/test/platform-mcp.test.js",
       "reason": "scanner_failed: spawnSync /usr/bin/node ETIMEDOUT"
     }
   ],
@@ -20,33 +40,33 @@
     "scope": "hook_observed_diff",
     "baseline": {
       "complete": true,
-      "captured_files": 229,
+      "captured_files": 233,
       "candidate_limit": 5000,
       "truncated": false,
       "enumeration_error_count": 0,
       "snapshot_error_count": 0,
-      "compensated_target_count": 2
+      "compensated_target_count": 6
     },
     "change_tracking": {
-      "touched_observed": 2,
-      "touched_retained": 2,
+      "touched_observed": 3,
+      "touched_retained": 3,
       "truncated": false,
       "bash_mutation": true,
-      "bash_discovered": 2,
+      "bash_discovered": 6,
       "bash_discovery_limit": 80,
       "bash_discovery_truncated": false
     },
     "candidates": {
-      "eligible_files": 2,
-      "selected_files": 2,
+      "eligible_files": 6,
+      "selected_files": 6,
       "limit": 20,
       "truncated": false
     },
     "scanning": {
-      "required_files": 2,
+      "required_files": 6,
       "scanned_files": 0,
       "skipped_files": 0,
-      "failed_files": 2,
+      "failed_files": 6,
       "project_checks_required": 0,
       "project_checks_completed": 0
     },
@@ -57,79 +77,227 @@
       "truncated": false
     },
     "reason_counts": {
-      "scanner_failed": 2,
-      "project_check_failed": 2
+      "scanner_failed": 6,
+      "project_check_failed": 6
     },
     "reasons": [
       {
         "code": "scanner_failed",
         "stage": "scan",
-        "target": "server/test/platform-cross.test.js",
+        "target": "web/src/api/platform.ts",
         "detail": "spawnSync /usr/bin/node ETIMEDOUT",
         "affects_completion": true
       },
       {
         "code": "scanner_failed",
         "stage": "scan",
-        "target": "server/index.js",
+        "target": "server/test/platform-b5.test.js",
+        "detail": "spawnSync /usr/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "server/test/platform-questions.test.js",
+        "detail": "spawnSync /usr/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "web/src/pages/LandingPage.tsx",
+        "detail": "spawnSync /usr/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "web/src/pages/PlatformPage.tsx",
+        "detail": "spawnSync /usr/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "server/test/platform-mcp.test.js",
         "detail": "spawnSync /usr/bin/node ETIMEDOUT",
         "affects_completion": true
       },
       {
         "code": "project_check_failed",
         "stage": "scan",
-        "target": "server/test/platform-cross.test.js",
+        "target": "web/src/api/platform.ts",
         "detail": "scanner_failed: spawnSync /usr/bin/node ETIMEDOUT",
         "affects_completion": true
       },
       {
         "code": "project_check_failed",
         "stage": "scan",
-        "target": "server/index.js",
+        "target": "server/test/platform-b5.test.js",
+        "detail": "scanner_failed: spawnSync /usr/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "server/test/platform-questions.test.js",
+        "detail": "scanner_failed: spawnSync /usr/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "web/src/pages/LandingPage.tsx",
+        "detail": "scanner_failed: spawnSync /usr/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "web/src/pages/PlatformPage.tsx",
+        "detail": "scanner_failed: spawnSync /usr/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "server/test/platform-mcp.test.js",
         "detail": "scanner_failed: spawnSync /usr/bin/node ETIMEDOUT",
         "affects_completion": true
       }
     ],
     "reasons_truncated": false
   },
-  "generated_at": "2026-10-27T05:12:33.835Z",
+  "generated_at": "2026-10-27T10:50:25.146Z",
   "session_id": "session_c83bf54bf3f9834cd71330d8fd6dc23d",
   "target": ".",
-  "revision": "47b3c995be301e3c583bae1032d2bff8f1ad3354",
+  "revision": "efa9cdc47a65ac72e4663f546f4aedbd7f2bb24d",
   "rules_version": "unavailable",
-  "diff_hash": "d10824778158daabee9c0e2a1daa5cc734c709a5c27596d871c6dae4479bc8cb",
+  "diff_hash": "71445ec0713548d57d4d8a23921fa4c5b9408e4db24b0c65796f35d69018a4b7",
   "diff": {
     "algorithm": "sha256",
-    "changed_file_count": 2,
+    "changed_file_count": 6,
     "changed_files": [
       {
-        "file": "server/index.js",
-        "ranges": [
-          {
-            "start": 139,
-            "end": 139
-          }
-        ],
-        "before_hash": "e52c97eed911fcbe3ab1b7f8a235475ec14404ef40d84ee45378181e0c13c52f",
-        "after_hash": "7f0d55e5f23c83684c6a0e10438516850cc1763100ab251d6529b4e48416e7eb"
-      },
-      {
-        "file": "server/test/platform-cross.test.js",
+        "file": "server/test/platform-b5.test.js",
         "ranges": [
           {
             "start": 1,
-            "end": 192
+            "end": 89
           }
         ],
         "before_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-        "after_hash": "50b16d89dc049a417c63e48c18956720d9a91a8ace70c79b8c23bb35b1cb0dec"
+        "after_hash": "e4b3bcba68c124c86e39949d3a1bd72393fdfe6b7dfe58b628242622fa6d4b82"
+      },
+      {
+        "file": "server/test/platform-mcp.test.js",
+        "ranges": [
+          {
+            "start": 144,
+            "end": 144
+          },
+          {
+            "start": 176,
+            "end": 176
+          }
+        ],
+        "before_hash": "27cf2a5c5d9582090a69bcf49bce13e929338c1e14855a88af5db2dbb8bea7d1",
+        "after_hash": "68fe3846ce4b7b79b2526011f79c354f01494229f8b6aab2c71a063f128de1e3"
+      },
+      {
+        "file": "server/test/platform-questions.test.js",
+        "ranges": [
+          {
+            "start": 45,
+            "end": 45
+          }
+        ],
+        "before_hash": "2fedc8366fd535e24d789b9de0933c1733efd1eeb5ab37314e366fdbc5ef44c4",
+        "after_hash": "50ecdccf51b18b7122a21976e85bd08cab046eda443df1a6d10935c0bcc95cfe"
+      },
+      {
+        "file": "web/src/api/platform.ts",
+        "ranges": [
+          {
+            "start": 14,
+            "end": 14
+          },
+          {
+            "start": 52,
+            "end": 53
+          },
+          {
+            "start": 61,
+            "end": 67
+          }
+        ],
+        "before_hash": "65ab76ee1e068646d5133fa5c3c788d80467742479cb536db8ab2160b1e85588",
+        "after_hash": "fba198d889fd593b94f26f7af0880a7515399af3adfa978ac7b15631f65b8c7d"
+      },
+      {
+        "file": "web/src/pages/LandingPage.tsx",
+        "ranges": [
+          {
+            "start": 19,
+            "end": 34
+          },
+          {
+            "start": 70,
+            "end": 77
+          }
+        ],
+        "before_hash": "b873d255fb6f128cf0cda8471fa648331e741e9cf6e289b0de02124890665adb",
+        "after_hash": "9811db63587d9ea4a8da5214ebbd9f8a3715560a57bf82d4908b6a663e921e77"
+      },
+      {
+        "file": "web/src/pages/PlatformPage.tsx",
+        "ranges": [
+          {
+            "start": 8,
+            "end": 8
+          },
+          {
+            "start": 28,
+            "end": 28
+          },
+          {
+            "start": 38,
+            "end": 38
+          },
+          {
+            "start": 157,
+            "end": 158
+          },
+          {
+            "start": 184,
+            "end": 184
+          },
+          {
+            "start": 193,
+            "end": 203
+          },
+          {
+            "start": 217,
+            "end": 224
+          },
+          {
+            "start": 232,
+            "end": 232
+          },
+          {
+            "start": 287,
+            "end": 333
+          }
+        ],
+        "before_hash": "e11f9fd063e5e71e78a8c7393f07d4617e006c7d07cbe05b7f5ed592e50ff078",
+        "after_hash": "574839c072d4b0d423eade309c8aa7271eb0ace3add916629441d8f6a2a2da22"
       }
     ]
   },
   "timing": {
-    "started_at": "2026-10-27T05:12:27.462Z",
-    "completed_at": "2026-10-27T05:12:33.835Z",
-    "duration_ms": 6373,
+    "started_at": "2026-10-27T10:50:17.534Z",
+    "completed_at": "2026-10-27T10:50:25.146Z",
+    "duration_ms": 7612,
     "measurement": "hook_wall_clock"
   },
   "tokens": {
@@ -144,8 +312,8 @@
     "profile": "gate",
     "operation": "Stop",
     "outcome": "partial/INCONCLUSIVE",
-    "latencyMs": 6373,
-    "peakMemoryBytes": 183881728,
+    "latencyMs": 7612,
+    "peakMemoryBytes": 183902208,
     "memoryMeasurement": "max-observed-process-rss",
     "scannedFiles": 0,
     "cache": {
@@ -172,8 +340,8 @@
   "finding_events": [],
   "findings": [],
   "artifacts": {
-    "immutable_report": ".mimosa/reports/task-review-session_c83bf54bf3f9834cd71330d8fd6dc23d-20261027T051233835Z-175666-a98d80c17102.json",
+    "immutable_report": ".mimosa/reports/task-review-session_c83bf54bf3f9834cd71330d8fd6dc23d-20261027T105025146Z-188025-6a2655b49665.json",
     "latest_report": ".mimosa/reports/task-review-session_c83bf54bf3f9834cd71330d8fd6dc23d.json",
-    "history_summary": ".mimosa/history/run-20261027T051233835Z-175666-a98d80c17102.json"
+    "history_summary": ".mimosa/history/run-20261027T105025146Z-188025-6a2655b49665.json"
   }
 }

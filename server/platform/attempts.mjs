@@ -30,8 +30,9 @@ export function startAttempt({ userId, roomCode = null, position = null, difficu
 }
 
 /**
- * 收卷:回写 finished_at 与三条件达标判定(JSON)。
- * 判据输入由调用方(评分引擎/复盘页)给出;κ 不在其中(发布门禁纪律)。
+ * 纪律(R8):判据输入必须由服务端评分引擎写入;当前 qualification 仅回显给用户本人,
+ * 不进统计/参评/证书 —— 接入任何此类消费方前必须改为服务端计算。
+ * 收卷:回写 finished_at 与三条件达标判定(JSON);κ 不在其中(发布门禁纪律)。
  */
 export function finishAttempt({ attemptId, userId, scoreAfter, baseline, dimsBefore, dimsAfter, recheckDeltas, recheckGrounded }) {
   const db = getDb();

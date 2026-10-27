@@ -4,9 +4,10 @@
 //   TRADE_CLOSED → 本地 closed;其余(等待中)留观。
 import { getDb, nowIso } from "../db.mjs";
 import { queryTrade, isConfigured } from "./alipay.mjs";
-import { markPaid, recordNotification, getOrder } from "./service.mjs";
+import { markPaid, recordNotification, getOrder, pruneOldNotifications } from "./service.mjs";
 
 export async function runReconciliation({ olderThanMin = 15, limit = 50 } = {}) {
+  const prunedNotifications = pruneOldNotifications(); // 开头先清理过期通知原文(R5)
   if (!isConfigured()) return { skipped: true, reason: "未配置支付宝,跳过(mock 轨无对账对象)" };
   const db = getDb();
   const cutoff = new Date(Date.now() - olderThanMin * 60_000).toISOString();
@@ -33,15 +34,22 @@ export async function runReconciliation({ olderThanMin = 15, limit = 50 } = {}) 
     }
   }
   result.scanned = pending.length;
+  result.pruned_notifications = prunedNotifications;
   return result;
 }
+
+// 单飞标志(R3):上一轮对账未跑完则跳过本轮,防慢网关下定时器堆叠重入
+let reconcileRunning = false;
 
 /** 供 mountPlatform 定时调度(仅在配钥态)。 */
 export function scheduleReconciliation(intervalMs = 5 * 60_000) {
   if (!isConfigured()) return null;
   const timer = setInterval(async () => {
+    if (reconcileRunning) return;
+    reconcileRunning = true;
     try { const r = await runReconciliation(); if (r.scanned > 0) console.log("[reconcile]", JSON.stringify(r)); }
     catch (e) { console.warn("[reconcile] fatal:", e.message); }
+    finally { reconcileRunning = false; }
   }, intervalMs);
   timer.unref();
   return timer;

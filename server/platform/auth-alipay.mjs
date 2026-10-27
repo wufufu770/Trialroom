@@ -9,12 +9,21 @@ import { getDb, genId, sha256Hex, nowIso } from "./db.mjs";
 import { issueToken } from "./auth.mjs";
 
 const AUTH_PAGE = "https://openauth.alipay.com/oauth2/publicAppAuthorize.htm";
-const pendingStates = new Map(); // state -> { exp }(10 分钟,一次性)
+export const STATE_TTL_MS = 10 * 60_000; // state 有效期(10 分钟,一次性)
+export const PENDING_STATES_MAX = 10_000; // 软上限:防未消费 state 无界累积(内存/R1 审查)
+// 导出仅供测试/运维观测注入;业务代码不得直接读写
+export const pendingStates = new Map(); // state -> exp(ms)
 
 export function buildAuthStartUrl(redirectUri) {
   if (!isConfigured()) throw Object.assign(new Error("支付宝三要素未配置,OAuth 登录不可用"), { status: 503 });
+  // 惰性清扫:set 前顺手清掉已过期项,兜住长期运行下的内存累积
+  const now = Date.now();
+  for (const [k, exp] of pendingStates) if (exp <= now) pendingStates.delete(k);
+  if (pendingStates.size >= PENDING_STATES_MAX) {
+    throw Object.assign(new Error("OAuth 状态表已达上限,请稍后重试"), { status: 503 });
+  }
   const state = crypto.randomBytes(16).toString("hex");
-  pendingStates.set(state, Date.now() + 10 * 60_000);
+  pendingStates.set(state, now + STATE_TTL_MS);
   const u = new URL(AUTH_PAGE);
   u.searchParams.set("app_id", process.env.ALIPAY_APP_ID);
   u.searchParams.set("scope", "auth_user");

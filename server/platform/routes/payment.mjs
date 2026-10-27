@@ -12,10 +12,11 @@ router.get("/products", (req, res) => {
 });
 
 router.post("/orders", platformAuth, requireScope("platform:write"), (req, res) => {
-  const { product_code, idempotency_key } = req.body ?? {};
+  const { product_code, idempotency_key, invited_by } = req.body ?? {};
   const provider = isConfigured() ? "alipay_web" : "mock";
   try {
-    const order = createOrder({ userId: req.user.id, productCode: product_code, idempotencyKey: idempotency_key, provider });
+    // invited_by(邀请返利):createOrder 内校验"邀请人存在 + 不得是自己"(400/409)
+    const order = createOrder({ userId: req.user.id, productCode: product_code, idempotencyKey: idempotency_key, provider, invitedBy: invited_by ?? null });
     if (provider === "alipay_web") {
       const { formHtml } = buildPagePayForm({
         outTradeNo: order.order_no, amountFen: order.amount_fen, subject: order.product_name,

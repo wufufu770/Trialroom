@@ -264,7 +264,7 @@ docker compose up -d --build
 | 埋点 | `POST /track` | 匿名漏斗(landing_uv 等 8 事件),90 天保留期 |
 | κ 校准 | `node server/scripts/calibrate-judge.mjs` | mock-first;双阈值发布门禁(G14);换算表见 `server/platform/calibration/kappa.mjs` |
 
-**门禁**:`node tools/verify-all.mjs` 一条命令跑 13 道(GATES 数组为唯一真相源),包括鉴权作用域覆盖(G06)、MCP 契约(G11)、题库来源卫生(G12)、许可分发(G13)、κ 校准(G14)。
+**门禁**:`node tools/verify-all.mjs` 一条命令跑 15 道(GATES 数组为唯一真相源),包括鉴权作用域覆盖(G06)、MCP 契约(G11)、题库来源卫生(G12)、许可分发(G13)、κ 校准(G14)、平台层全链路 E2E(G15)。
 
 **环境变量**:平台层配置(支付宝三要素、MCP_AUD、管理员令牌等)见 `.env.example` 的「Trialroom 平台层」段;不配支付宝密钥时支付走 mock 轨(自动打内控标,统计口径排除)。
 

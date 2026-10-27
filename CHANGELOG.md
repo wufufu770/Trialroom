@@ -6,6 +6,17 @@
 
 ## [Unreleased]
 
+### Added（Trialroom 平台层）
+
+- **支付宝网页应用收款 + 权益体系**:`POST /api/platform/orders`(RSA2 全验签;mock/真实双轨按三要素自动切换)、`entitlements` 表作权益唯一真相源(次卡/时间卡,退款即作废)、¥0.01 首单每人限一次(数据库部分唯一索引原子保证)、对账补偿定时任务。
+- **房间邀请制**:`/api/platform/rooms*` 六位房号仅作入座凭证(接口永不回显,越权与不存在同响应 404)、房内发言/消息拉取、幂等推进;`/share/:code.svg` 邀请分享卡。
+- **支付宝 OAuth 登录**:`/api/platform/auth/alipay/start|callback`,state 一次性防 CSRF(10 分钟过期)。
+- **MCP 接入面**:`POST /mcp` 六工具冻结件 + 独立 token class(`mcp_tokens`)+ scope 分片 + aud 校验 + 错码锁定,供外部 agent 入座房间。
+- **κ 校准管线**:`server/scripts/calibrate-judge.mjs`(mock-first)+ `server/platform/calibration/kappa.mjs` 换算表 + 双阈值发布门禁(G14)。
+- **门禁体系 15 道**:`tools/verify-all.mjs` GATES 注册表扩至 15 道(新增 G14 κ 校准、G15 平台层全链路 E2E 24/24、G16 压测,均为显式开启制或环境缺失记 SKIP)。
+- **错题本跨会话聚合**:`listMissedQuestions`(question_feedback `is_missed` 聚合,按题去重、累计错误次数、时间倒序),支撑复习场景。
+- 匿名漏斗埋点 `POST /track`(8 事件白名单,90 天保留期,30 次/分钟限流);平台数据独立落 `trialroom.db`,不触碰基座表。
+
 ### Fixed
 - nginx 改为运行时解析后端(`resolver 127.0.0.11` + 变量 upstream)：web 容器不再因后端未就绪/换 IP 而启动失败或断链（独立运行时 /api 返回 502 而非崩溃）。
 - README 的 `## License` 链接未闭合（渲染为 `[MIT## 题库资产`），且标题重复出现两次；README 版本号与已发布版本不一致。

@@ -42,7 +42,7 @@ test("MCP 推进注入真题:同房两题不同、题干真实、答案零泄漏
   const r = rooms.createRoom({ hostUserId: "uA", industry: "qa" });
   const mcp = { token_id: "tk", user_id: "uA", scopes: ["rooms:advance"] };
   const a1 = tools["ask_next_question"](mcp, { room_id: r.room_id, idempotency_key: "k1" });
-  assert.ok(a1.question_ref?.startsWith("qa-"), `qa 行业应命中 qa-*,实际 ${a1.question_ref}`);
+  assert.ok(/^(pro-)?qa-/.test(a1.question_ref), `qa 行业应命中 qa-*/pro-qa-*(Pro 优先),实际 ${a1.question_ref}`);
   assert.ok(a1.question.length > 20, "题干为真实内容");
   const a2 = tools["ask_next_question"](mcp, { room_id: r.room_id, idempotency_key: "k2" });
   assert.notEqual(a2.question_ref, a1.question_ref);

@@ -33,6 +33,16 @@ services:
       - DAILY_TOKEN_BUDGET=500000
       # CORS 白名单(逗号分隔)
       - CORS_ORIGINS=http://localhost:5173,http://localhost:1420,http://localhost:9090
+      # —— Trialroom 平台层(R6 补录):在 docker/.env 或宿主环境注入,.env.example 有全表 ——
+      # 注意:默认值必须与代码内默认一致。compose 会把未设变量替换成**空串**注入,
+      # 而服务端兜底全用 `??`(空串不触发),裸 ${VAR:-} 会把默认值打穿 ——
+      # 例如 API_RATE_GENERAL="" → Number("")=0 → /api 全量 429。
+      - API_RATE_GENERAL=${API_RATE_GENERAL:-120}
+      - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-http://localhost:5173}
+      # OAuth 回调建议显式钉死为对外域名;留空则按请求 Host 推导
+      - ALIPAY_OAUTH_REDIRECT=${ALIPAY_OAUTH_REDIRECT:-}
+      # ⚠️ 危险开关:1 = 允许非官方网关域(跳过网关主机白名单),仅本地桩测试,生产必须保持 0
+      - ALIPAY_TRUST_GATEWAY=${ALIPAY_TRUST_GATEWAY:-0}
     restart: unless-stopped
     # 资源限制 + 日志限制
     deploy:

@@ -1,12 +1,18 @@
 // 首屏空状态:推荐剧本 + 最近练习 + 能力雷达
 // v10:把"工具"变"产品",新用户进来就有事可做,价值前置
-import { useMemo } from "react";
+import { lazy, Suspense, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useI18n } from "@/i18n";
 import { INTERVIEW_SCENARIOS, type InterviewScenario } from "@/shared";
-import { EvaluationRadar } from "@/components/charts/EvaluationRadar";
 import { ArrowRight, Clock, TrendingUp, Sparkles, Target } from "lucide-react";
 import { cn } from "@/shared";
+
+// 首屏性能:EvaluationRadar 会把整个 recharts(约 545KB 的 charts chunk)
+// 拉进首屏关键路径(HTML modulepreload)。改为懒加载:仅当用户确有
+// ≥3 次评估数据、雷达区块真正渲染时才拉取图表代码。
+const EvaluationRadar = lazy(() =>
+  import("@/components/charts/EvaluationRadar").then((m) => ({ default: m.EvaluationRadar })),
+);
 
 interface Props {
   onPickScenario: (s: InterviewScenario) => void;
@@ -183,7 +189,17 @@ export function EmptyStateHome({ onPickScenario, recentSessions = [], evaluation
               <span>{t("empty.radar.title")}</span>
             </h2>
             <div className="border border-ide-border bg-ide-bg-alt p-4">
-              <EvaluationRadar dimensions={radarData} />
+              {/* 占位高度与 ResponsiveContainer(height=260)一致,避免懒加载完成时布局跳动 */}
+              <Suspense
+                fallback={
+                  <div
+                    aria-hidden
+                    className="h-[260px] w-full animate-pulse rounded bg-ide-bg-active"
+                  />
+                }
+              >
+                <EvaluationRadar dimensions={radarData} />
+              </Suspense>
               <p className="mt-2 text-center text-xs text-ide-fg-muted">
                 {t("empty.radar.hint", { count: evaluations.length })}
               </p>

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "@/api/client";
+import { platformApi, getPlatformToken } from "@/api/platform";
 import { cn, FLOW_TEMPLATES, getDifficultyConfig, type InterviewScenario } from "@/shared";
 import { useI18n } from "@/i18n";
 import { useModalA11y } from "@/lib/useModalA11y";
@@ -36,7 +37,7 @@ import { registerLocalWhisper, setWhisperContext } from "@/lib/asr/localWhisper"
 import { buildReviewPrompt, parseReviewResult } from "@/lib/reviewGenerator";
 import {
   Loader2, AlertCircle, Paperclip, X, RotateCcw, BookOpen,
-  StopCircle, Sparkles,
+  StopCircle, Sparkles, Ticket,
 } from "lucide-react";
 
 interface Provider {
@@ -196,6 +197,20 @@ export function InterviewPage() {
   // v10 C2:配置面板渐进式披露 - 默认折叠高级配置(难度/流程/重点/资料/面试官)
   const [showAdvanced, setShowAdvanced] = useState(false);
 
+  // ★2 平台权益编排:开跑扣次(startAttempt)→ 常驻余量角标 → 收卷判定(finishAttempt)。
+  // 全链路静默降级:平台不可用/未登录时本地练习照常,权益链路只增不改。
+  const navigate = useNavigate();
+  const [quotaBadge, setQuotaBadge] = useState<{ kind: string; quotaLeft: number | null } | null>(null);
+  const [showPaywallDialog, setShowPaywallDialog] = useState(false);
+  const paywallModalRef = useModalA11y(() => setShowPaywallDialog(false), showPaywallDialog);
+  const activeAttemptIdRef = useRef<string | null>(null);
+  // 402 后用户选「免费练习」:本次页面生命周期内跳过扣次,不再重复弹窗
+  const freePracticeRef = useRef(false);
+  // #7 提醒:次卡余量 ≤ 2 时角标转警示色。
+  // 时间卡(kind=time_pass)的到期时间平台 API 暂未暴露,先用可得数据:
+  // 有 quota_left 走余量警示;无则仅展示"时间卡生效中"(不高亮),待端点补齐后接入。
+  const quotaLow = quotaBadge != null && quotaBadge.quotaLeft != null && quotaBadge.quotaLeft <= 2;
+
   // 方案 10:语音对话系统(L0 浏览器原生 Web Speech API)
   // autoSpeak / voiceConfigs 持久化到 localStorage,刷新后保留用户偏好
   const [autoSpeak, setAutoSpeakState] = useState<boolean>(() => {
@@ -230,6 +245,13 @@ export function InterviewPage() {
   // 页面挂载即注册,依赖 VoicePanel 内部 asrRegistry.getDefault() 在渲染时读取
   useEffect(() => {
     registerLocalWhisper();
+  }, []);
+
+  // ★2:页面挂载时拉平台尝试记录(仅平台已登录时)。静默失败不阻塞本地练习;
+  // 结果当前仅用于预热权益链路(余量以后续 startAttempt 响应为准)。
+  useEffect(() => {
+    if (!getPlatformToken()) return;
+    platformApi.myAttempts().catch(() => { /* 平台不可用:静默,本地练习照常 */ });
   }, []);
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -731,6 +753,22 @@ export function InterviewPage() {
       setError(t("interview.noQuestionsForIndustry"));
       return;
     }
+    // ★2:平台已登录则先 startAttempt 扣次(次卡扣额度/时间卡校验期)。
+    // 402(无权益)→ 弹双按钮:去购买(/platform?tab=checkout)或免费练习(跳过扣次继续)。
+    // 其余失败(网络/限流等)静默降级为免费练习 —— 权益链路故障不阻塞本地开跑。
+    if (getPlatformToken() && !activeAttemptIdRef.current && !freePracticeRef.current) {
+      try {
+        const r = await platformApi.startAttempt({ position: targetPosition || undefined, difficulty });
+        activeAttemptIdRef.current = r.attempt_id;
+        setQuotaBadge({ kind: r.entitlement?.kind || "attempt_pack", quotaLeft: r.entitlement?.quota_left ?? null });
+      } catch (e: any) {
+        if (e?.status === 402) {
+          setShowPaywallDialog(true);
+          return;
+        }
+        console.warn("[platform] startAttempt 失败,降级为免费练习:", e?.message);
+      }
+    }
     let sess = currentSession;
     if (!sess) {
       sess = await createSession();
@@ -823,7 +861,7 @@ export function InterviewPage() {
       sendingRef.current = false;
       resetStreaming();
     }
-  }, [agentMode, activeAgentId, agentTeam, currentAgent, currentModel, currentSession, createSession, currentStageAskMode, currentStageBindings, getAgentById, buildTeamInfo, currentStageName, materials, focusDirection, difficulty, getSystemPrompt, stageIndex, appendStreamingContent, resetStreaming, setMessages, setStreaming, setStreamingContent, setActiveAgentId, setLastActiveAgentId, setError]);
+  }, [agentMode, activeAgentId, agentTeam, currentAgent, currentModel, currentSession, createSession, currentStageAskMode, currentStageBindings, getAgentById, buildTeamInfo, currentStageName, materials, focusDirection, difficulty, targetPosition, getSystemPrompt, stageIndex, appendStreamingContent, resetStreaming, setMessages, setStreaming, setStreamingContent, setActiveAgentId, setLastActiveAgentId, setError]);
 
   const sendMessage = useCallback(async (contentOverride?: string) => {
     if (sendingRef.current) return;
@@ -1187,6 +1225,22 @@ export function InterviewPage() {
     setPendingScenario(null);
   }, [pendingScenario, agents, flow, customStages]);
 
+  // ★2:会话收卷 —— 在现有的"结束面试/评估完成"时机回写平台三条件判据。
+  // 先用可得数据:scoreAfter=整场评估总分(缺省 0)、baseline=0、dims 暂传空
+  // (逐题维度均值需跨评估聚合,后续接入)。finish 失败静默,不阻塞本地收卷。
+  const finishPlatformAttempt = useCallback((scoreAfter: number) => {
+    const attemptId = activeAttemptIdRef.current;
+    if (!attemptId) return;
+    platformApi.finishAttempt(attemptId, {
+      scoreAfter,
+      baseline: 0,
+      dimsBefore: [],
+      dimsAfter: [],
+    })
+      .then(() => { activeAttemptIdRef.current = null; })
+      .catch(() => { /* 收卷失败静默:不影响本地回顾与展示 */ });
+  }, []);
+
   // v5:结束面试 - 生成整场回顾评价
   const handleEndInterview = useCallback(async () => {
     if (reviewGenerating) return;
@@ -1209,6 +1263,8 @@ export function InterviewPage() {
         if (existing) {
           setCurrentReview(existing);
           setReviewGenerating(false);
+          // ★2:评估已就绪即收卷(总分取已有评价,缺省 0)
+          finishPlatformAttempt(Number((existing as any)?.overallScore) || 0);
           return;
         }
       } catch (e) { console.warn("No existing review found, will generate:", e); }
@@ -1249,12 +1305,14 @@ export function InterviewPage() {
       // 持久化
       const saved = await api.createSessionReview(currentSession.sessionId, parsed);
       setCurrentReview({ ...parsed, ...saved });
+      // ★2:评估完成即收卷,scoreAfter 取本次评估总分(取不到则 0)
+      finishPlatformAttempt(Number(parsed.overallScore) || 0);
     } catch (e: any) {
       setError(t("interview.errors.generateReviewFailed", { msg: String(e.message) }));
     } finally {
       setReviewGenerating(false);
     }
-  }, [reviewGenerating, currentSession, messages, agentMode, agentTeam, currentAgent, getAgentById, focusDirection, stages, difficulty, currentModel, setError]);
+  }, [reviewGenerating, currentSession, messages, agentMode, agentTeam, currentAgent, getAgentById, focusDirection, stages, difficulty, currentModel, finishPlatformAttempt, setError]);
 
   // 渲染分隔线:当 activeAgentId 变化且与 lastActiveAgentId 不同
   const showSwitchDivider = agentMode === "multi" && lastActiveAgentId && activeAgentId && lastActiveAgentId !== activeAgentId;
@@ -1334,6 +1392,19 @@ export function InterviewPage() {
             {focusDirection && (
               <span className="bg-ide-bg-active px-1.5 py-0.5 text-[10px] text-ide-accent">
                 {focusDirection.length > 12 ? focusDirection.slice(0, 12) + "..." : focusDirection}
+              </span>
+            )}
+            {/* ★2/#7:平台权益余量角标 —— 成功扣次后常驻;quota_left ≤ 2 转警示色(#7 提醒) */}
+            {quotaBadge && (
+              <span
+                title={quotaLow ? "练习余量不足,可到平台页购买补充" : "平台权益余量"}
+                className={cn(
+                  "flex shrink-0 items-center gap-1 px-1.5 py-0.5 text-[10px]",
+                  quotaLow ? "bg-ide-danger/20 text-ide-danger" : "bg-ide-bg-active text-ide-fg-muted"
+                )}
+              >
+                <Ticket size={11} />
+                {quotaBadge.quotaLeft != null ? `练习余量 ${quotaBadge.quotaLeft} 次` : "时间卡生效中"}
               </span>
             )}
             <button onClick={handleOpenMaterialPicker} title={t("interview.addMaterialTip")}
@@ -1590,6 +1661,46 @@ export function InterviewPage() {
           />
         )}
       </section>
+
+      {/* ★2:402 无权益 —— 双按钮选择:去购买(收银台)/ 免费练习(跳过扣次继续) */}
+      {showPaywallDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowPaywallDialog(false)}>
+          <div
+            ref={paywallModalRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label="练习权益提示"
+            tabIndex={-1}
+            className="w-full max-w-sm border border-ide-border bg-ide-bg p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-ide-fg">
+              <Ticket size={14} className="text-ide-accent" /> 练习次数已用完
+            </div>
+            <p className="mb-4 text-xs text-ide-fg-muted">
+              平台套餐权益已耗尽。可前往平台页购买练习套餐,或选择免费继续练习(不消耗权益)。
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => {
+                  freePracticeRef.current = true;
+                  setShowPaywallDialog(false);
+                  void startInterview();
+                }}
+                className="flex h-7 items-center border border-ide-border bg-ide-bg px-3 text-xs text-ide-fg hover:bg-ide-bg-active"
+              >
+                免费练习
+              </button>
+              <button
+                onClick={() => { setShowPaywallDialog(false); navigate("/platform?tab=checkout"); }}
+                className="flex h-7 items-center bg-ide-accent px-3 text-xs text-ide-accent-fg hover:bg-ide-accent-hover"
+              >
+                去购买
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* v5:整场回顾评价弹窗 */}
       {showReviewModal && (

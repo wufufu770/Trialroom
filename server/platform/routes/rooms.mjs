@@ -4,6 +4,7 @@ import { platformAuth, createDevUser, requireScope } from "../auth.mjs";
 import * as rooms from "../rooms.mjs";
 import { startAttempt, finishAttempt, myAttempts, closeRoom, leaveRoom } from "../attempts.mjs";
 import { aiFollowUp } from "../interviewer.mjs";
+import { getDb, nowIso } from "../db.mjs";
 
 export const router = express.Router();
 
@@ -72,6 +73,69 @@ router.post("/attempts/:id/finish", platformAuth, requireScope("platform:write")
 router.get("/attempts", platformAuth, (req, res) => {
   res.json({ ok: true, attempts: myAttempts(req.user.id, req.query.limit) });
 });
+
+// ── 商业化 #7 权益提醒 + #9 话术:剩余额度 + 最近到期的时间卡 ──────────────
+// 次卡口径与 consumeEntitlement 一致:status='active' 且未过期;quota_total-quota_used 求和。
+router.get("/attempts/quota", platformAuth, (req, res) => {
+  const db = getDb();
+  const now = nowIso();
+  const packs = db.prepare(`SELECT COALESCE(SUM(quota_total - quota_used), 0) AS quota_left
+    FROM entitlements WHERE user_id = ? AND kind = 'attempt_pack' AND status = 'active'
+      AND (valid_until IS NULL OR valid_until > ?)`).get(req.user.id, now);
+  const tp = db.prepare(`SELECT MIN(valid_until) AS nearest FROM entitlements
+    WHERE user_id = ? AND kind = 'time_pass' AND status = 'active' AND valid_until > ?`)
+    .get(req.user.id, now);
+  res.json({ ok: true, quota_left: packs.quota_left, time_pass_nearest_expiry: tp.nearest ?? null });
+});
+
+// ── 商业化 #2 岗位就绪度认证卡:最近 10 场已完成的达标率 → SVG(认证版/修炼版)──
+// 校准纪律:κ 是语料级×版本级统计量,只在发布门禁内部流转;此卡只呈现用户自身
+// 达标率(passed 占比),任何分支都不得出现 κ 数值。
+router.get("/ready-card", platformAuth, (req, res) => {
+  const db = getDb();
+  const user = db.prepare("SELECT display_name FROM users WHERE id = ?").get(req.user.id);
+  const rows = db.prepare(`SELECT position, qualification, finished_at FROM interview_attempts
+    WHERE user_id = ? AND finished_at IS NOT NULL ORDER BY finished_at DESC LIMIT 10`).all(req.user.id);
+  const isPassed = (q) => { try { return JSON.parse(q ?? "null")?.passed === true; } catch { return false; } };
+  const passedCount = rows.filter((r) => isPassed(r.qualification)).length;
+  const rate = rows.length ? passedCount / rows.length : 0;
+  const ready = rows.length > 0 && rate >= 0.7;
+  const svg = buildReadyCardSvg({
+    name: String(user?.display_name ?? "").slice(0, 8) || "候选人",
+    rate, passedCount, total: rows.length,
+    position: String(rows[0]?.position ?? "通用岗位").slice(0, 16),
+    date: new Date().toISOString().slice(0, 10),
+    ready,
+  });
+  res.json({ ok: true, svg, ready, pass_rate: rate, passed: passedCount, sample: rows.length });
+});
+
+// 与 index.mjs /share/:code.svg 同一视觉语言(#0d1117 底 / 等宽 / #3fb950 绿)
+function buildReadyCardSvg({ name, rate, passedCount, total, position, date, ready }) {
+  const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const pct = `${Math.round(rate * 100)}%`;
+  if (ready) {
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="320">
+  <rect width="100%" height="100%" fill="#0d1117"/>
+  <rect x="8" y="8" width="584" height="304" fill="none" stroke="#3fb950" stroke-width="2"/>
+  <text x="40" y="66" fill="#3fb950" font-family="monospace" font-size="24">$ 岗位就绪认证 · TRIALROOM</text>
+  <text x="40" y="130" fill="#e6edf3" font-family="monospace" font-size="52">${esc(name)}</text>
+  <text x="40" y="180" fill="#e6edf3" font-family="monospace" font-size="34">${esc(position)} · 达标率 ${esc(pct)}</text>
+  <text x="40" y="230" fill="#8b949e" font-size="17">近 ${total} 场已完成面试 ${passedCount} 场达到三条件标准</text>
+  <text x="40" y="282" fill="#8b949e" font-size="15">${esc(date)} · 判定口径:客观基准三条件(非模型自由裁量)</text>
+</svg>`;
+  }
+  // 修炼版:不出现任何 κ 数值(校准纪律),也不宣示达标
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="320">
+  <rect width="100%" height="100%" fill="#0d1117"/>
+  <rect x="8" y="8" width="584" height="304" fill="none" stroke="#8b949e" stroke-width="1"/>
+  <text x="40" y="66" fill="#d29922" font-family="monospace" font-size="24">修炼中 · TRIALROOM</text>
+  <text x="40" y="130" fill="#e6edf3" font-family="monospace" font-size="52">${esc(name)}</text>
+  <text x="40" y="180" fill="#e6edf3" font-family="monospace" font-size="30">${esc(position)} · 完成 ${total} 场 · 达标 ${passedCount} 场</text>
+  <text x="40" y="230" fill="#8b949e" font-size="17">继续练习:达标率 70% 即可获得岗位就绪认证</text>
+  <text x="40" y="282" fill="#8b949e" font-size="15">${esc(date)} · 认证只看三条件实测,不做预测性背书</text>
+</svg>`;
+}
 
 // ── P1#8 房间生命周期 ─────────────────────────────────────────────────────
 router.post("/rooms/:roomId/close", platformAuth, requireScope("platform:write"), (req, res) => {

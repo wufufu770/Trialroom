@@ -23,7 +23,7 @@ const event = (db, orderNo, ev, payload = {}) =>
  * 幂等下单:同 (user, operation=create_order, client_key) 恒返回同一单。
  * 原子占位由 orders.idempotency_key UNIQUE 兜底 —— 冲突即读回原单。
  */
-export function createOrder({ userId, productCode, idempotencyKey = null, provider = "mock", source = "self_built", internal = false }) {
+export function createOrder({ userId, productCode, idempotencyKey = null, provider = "mock", source = "self_built", internal = false, invitedBy = null }) {
   const db = getDb();
   const product = PRODUCTS[productCode];
   if (!product) throw Object.assign(new Error(`未知商品 ${productCode}`), { status: 400 });
@@ -34,11 +34,19 @@ export function createOrder({ userId, productCode, idempotencyKey = null, provid
   }
   const orderNo = `TR${Date.now().toString(36)}${crypto.randomBytes(5).toString("hex").toUpperCase()}`;
   const idem = idempotencyKey ? `web:${userId}:create_order:${idempotencyKey}` : null;
+  // 邀请返利:归一化 + 服务端兜底校验(路由层已校验;此处防其他调用方绕过)
+  const inv = invitedBy == null || invitedBy === "" ? null : String(invitedBy).slice(0, 64);
+  if (inv) {
+    if (inv === userId) throw Object.assign(new Error("不能邀请自己"), { status: 409 });
+    if (!db.prepare("SELECT 1 FROM users WHERE id = ?").get(inv)) {
+      throw Object.assign(new Error("邀请人不存在"), { status: 400 });
+    }
+  }
   try {
     db.prepare(`INSERT INTO orders (order_no, user_id, product_code, product_name, amount_fen,
-      provider, source, idempotency_key, is_internal_verification)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(orderNo, userId, product.code, product.name, product.amount_fen, provider, source, idem, internal ? 1 : 0);
+      provider, source, idempotency_key, is_internal_verification, invited_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(orderNo, userId, product.code, product.name, product.amount_fen, provider, source, idem, internal ? 1 : 0, inv);
   } catch (e) {
     if (String(e.message).includes("UNIQUE") && idem) {
       const prior = db.prepare("SELECT * FROM orders WHERE idempotency_key = ?").get(idem);
@@ -93,6 +101,28 @@ export function markPaid(orderNo, { tradeNo = null, buyerAccountHash = null, buy
       .run(entId, order.user_id, orderNo, product.kind, product.quota ?? 0, until);
     db.prepare("INSERT INTO entitlement_ledger (id, entitlement_id, delta, reason, ref) VALUES (?, ?, ?, 'grant', ?)")
       .run(genId("elf"), entId, product.quota ?? 1, orderNo);
+    // ── 邀请返利(商业化 #1):被邀请人【首笔】paid 且带 invited_by → 邀请人 +1 次 attempt_pack。
+    // 同一被邀请人只奖励一次(查邀请人是否已因该被邀请人拿过 referral grant);
+    // 与主权益同事务原子授予。被邀请人退款不追回已发返利(refundOrder 不触碰 referral 权益,
+    // 单向礼让防"退款夺回"套利 —— 测试见 server/test/platform-referral.test.js 注释)。
+    if (order.invited_by) {
+      const isFirstPaid = !db.prepare(
+        "SELECT 1 FROM orders WHERE user_id = ? AND status = 'paid' AND order_no != ? LIMIT 1")
+        .get(order.user_id, orderNo);
+      const alreadyRewarded = !!db.prepare(`SELECT 1 FROM entitlement_ledger l
+        JOIN entitlements e ON e.id = l.entitlement_id
+        JOIN orders o ON o.order_no = e.order_no
+        WHERE o.user_id = ? AND o.invited_by = ? AND l.reason = 'grant' AND l.ref LIKE 'referral:%'
+        LIMIT 1`).get(order.user_id, order.invited_by);
+      if (isFirstPaid && !alreadyRewarded) {
+        const refEntId = genId("ent");
+        db.prepare(`INSERT INTO entitlements (id, user_id, order_no, kind, quota_total, valid_until)
+          VALUES (?, ?, ?, 'attempt_pack', 1, NULL)`)
+          .run(refEntId, order.invited_by, orderNo);
+        db.prepare("INSERT INTO entitlement_ledger (id, entitlement_id, delta, reason, ref) VALUES (?, ?, 1, 'grant', ?)")
+          .run(genId("elf"), refEntId, `referral:${orderNo}`);
+      }
+    }
     // 内控单不产生 first_pay 埋点(审查 F5:mock 自测污染漏斗)
     if (order.product_code === "first_order_001" && !order.is_internal_verification) {
       db.prepare("INSERT INTO funnel_events (id, event, user_hash) VALUES (?, 'first_pay', ?)")
@@ -141,7 +171,9 @@ export function refundOrder(orderNo, amountFen) {
     db.prepare(`UPDATE orders SET status='refunded', refund_state='done', refunded_at=?, refund_amount_fen=? WHERE order_no=?`)
       .run(nowIso(), amountFen ?? order.amount_fen, orderNo);
     event(db, orderNo, "refunded", { amount_fen: amountFen ?? order.amount_fen });
-    const ents = db.prepare("SELECT id FROM entitlements WHERE order_no = ?").all(orderNo);
+    // 只作废买方本人名下的权益:同单上的邀请返利(权益持有人 = 邀请人 ≠ 买方)不追回,
+    // 退款夺回是套利路径(商业化 #1 纪律,测试见 platform-referral.test.js)
+    const ents = db.prepare("SELECT id FROM entitlements WHERE order_no = ? AND user_id = ?").all(orderNo, order.user_id);
     for (const e of ents) {
       db.prepare("UPDATE entitlements SET status='refunded' WHERE id = ?").run(e.id);
       db.prepare("INSERT INTO entitlement_ledger (id, entitlement_id, delta, reason) VALUES (?, ?, 0, 'refund')")
@@ -178,10 +210,33 @@ export function consumeEntitlement(userId, kind = "attempt_pack") {
   return db.prepare("SELECT * FROM entitlements WHERE id = ?").get(ent.id);
 }
 
+// 买家字段脱敏(R5):buyer_id/buyer_logon_id/seller_id 的值只留前 4 位,
+// 兼容 JSON("key":"v")与表单/查询串(key=v)两种 raw_body 形态。
+const BUYER_FIELD_JSON_RE = /("(?:buyer_id|buyer_logon_id|seller_id)"\s*:\s*")([^"]*)(")/g;
+const BUYER_FIELD_QS_RE = /((?:^|[?&])(?:buyer_id|buyer_logon_id|seller_id)=)([^&]*)/g;
+const maskValue = (v) => `${String(v).slice(0, 4)}***`;
+function maskBuyerFields(raw) {
+  return String(raw)
+    .replace(BUYER_FIELD_JSON_RE, (_m, p1, v, p3) => p1 + maskValue(v) + p3)
+    .replace(BUYER_FIELD_QS_RE, (_m, p1, v) => p1 + maskValue(v));
+}
+
 export function recordNotification({ provider, rawBody, verifyOk, parsed = null }) {
+  // 通知原文留档前先脱敏买家标识(R5):争议回放不需要完整买家信息
+  const masked = maskBuyerFields(String(rawBody)).slice(0, 16384);
   getDb().prepare(`INSERT INTO payment_notifications (id, provider, raw_body, verify_ok, parsed)
-    VALUES (?, ?, ?, ?, ?)`).run(genId("pnt"), provider, String(rawBody).slice(0, 16384), verifyOk ? 1 : 0,
+    VALUES (?, ?, ?, ?, ?)`).run(genId("pnt"), provider, masked, verifyOk ? 1 : 0,
     parsed ? JSON.stringify(parsed) : null);
+}
+
+/**
+ * 清理过期通知原文(R5):raw_body 含交易/买家信息,默认只留 180 天证据窗口。
+ * 返回删除行数。供 runReconciliation 周期调用。
+ */
+export function pruneOldNotifications(days = 180) {
+  const d = Number.isFinite(Number(days)) && Number(days) > 0 ? Number(days) : 180;
+  return getDb().prepare(`DELETE FROM payment_notifications WHERE created_at < datetime('now', ?)`)
+    .run(`-${d} days`).changes;
 }
 
 /** 多口径统计(A1-A4 对冲读出端;订单级回填审核通过时间)。 */

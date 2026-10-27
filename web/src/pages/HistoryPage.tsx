@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { api } from "@/api/client";
 import { cn, formatTime } from "@/shared";
 import { EVALUATION_DIMENSIONS } from "@/lib/evaluation/starEvaluator";
@@ -23,7 +24,18 @@ import { useI18n } from "@/i18n";
 import { buildHeatmapData } from "@/lib/heatmapData";
 import { normalizeAgent, type Agent } from "@/types/agent";
 import type { SessionInfo, SessionReview } from "@/types/session";
-import { Sparkles, Loader2, AlertCircle, Star, TrendingUp, AlertTriangle, FolderOpen, Flame, MessagesSquare, Download, FileJson, FileText } from "lucide-react";
+import { Sparkles, Loader2, AlertCircle, Star, TrendingUp, AlertTriangle, FolderOpen, Flame, MessagesSquare, Download, FileJson, FileText, BookX } from "lucide-react";
+
+// 错题列表项(★3:GET /api/missed-questions 聚合行,camelCase)
+interface MissedQuestion {
+  question: string;
+  answer: string;
+  sessionId?: string;
+  weaknessTags?: string[];
+  betterAnswer?: string | null;
+  lastMissedAt?: string;
+  missedCount?: number;
+}
 
 interface Message {
   id?: string;
@@ -79,6 +91,13 @@ export function HistoryPage() {
   // 分组归纳数据
   const [allReviews, setAllReviews] = useState<any[]>([]);
   const [allEvals, setAllEvals] = useState<Evaluation[]>([]);
+
+  // ★3 错题本:跨会话聚合 is_missed=1 的逐题反馈。静默失败(未登录/接口不可用)时不显示该区块。
+  const [missedQuestions, setMissedQuestions] = useState<MissedQuestion[]>([]);
+  const [missedLoaded, setMissedLoaded] = useState(false);
+  const [missedExpanded, setMissedExpanded] = useState<string | null>(null); // 展开的题干(去重主键)
+  const [missedTag, setMissedTag] = useState<string | null>(null);           // weakness tag 筛选
+  const navigate = useNavigate();
   // W5-1(P2-4):个人历史基准,替代此前硬编码 3.5 的"同岗位平均"假线。
   // 数据来自用户自己的全部评估;样本不足时不显示,而不是画一条编出来的线。
   const personalBaseline = useMemo(
@@ -90,6 +109,26 @@ export function HistoryPage() {
 
   // 成长热力图数据(基于全局评估聚合最近 26 周活跃度)
   const heatmapData = useMemo(() => buildHeatmapData(allEvals as any[]), [allEvals]);
+
+  // ★3:错题本的 weakness tag 全集(取前 12 个防刷屏)与筛选后的列表
+  const missedAllTags = useMemo(() => {
+    const s = new Set<string>();
+    for (const q of missedQuestions) {
+      for (const tg of q.weaknessTags || []) {
+        if (tg) s.add(String(tg));
+      }
+    }
+    return Array.from(s).slice(0, 12);
+  }, [missedQuestions]);
+  const filteredMissed = useMemo(
+    () => (missedTag ? missedQuestions.filter((q) => (q.weaknessTags || []).includes(missedTag)) : missedQuestions),
+    [missedQuestions, missedTag]
+  );
+  // 摘要截断:题干/回答在列表里只露一行,展开看全文
+  const clip = (s: string | null | undefined, n = 60) => {
+    const t = String(s || "").trim();
+    return t.length > n ? t.slice(0, n) + "…" : t;
+  };
 
   // C4:跨场能力雷达 - 聚合所有评估的 dimensions,展示综合能力分布
   const crossFieldRadar = useMemo(() => {
@@ -196,6 +235,15 @@ export function HistoryPage() {
       // 静默失败
     } finally {
       setWeaknessLoading(false);
+    }
+
+    // ★3:错题本聚合(基座认证,登录态私有)。失败静默 —— 区块整体不展示。
+    try {
+      setMissedQuestions((await api.listMissedQuestions()) || []);
+    } catch {
+      // 静默失败(未登录 401 / 题库接口不可用)
+    } finally {
+      setMissedLoaded(true);
     }
   }, []);
 
@@ -656,6 +704,124 @@ export function HistoryPage() {
               </div>
             )}
           </div>
+
+          {/* ★3:错题本 —— 跨会话聚合 is_missed=1 的逐题反馈,最近优先 */}
+          {missedLoaded && (
+            <div className="border-b border-ide-border p-3">
+              <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase text-ide-fg-muted">
+                <BookX size={12} />
+                错题本
+                <span className="text-[10px] font-normal normal-case text-ide-fg-muted">{filteredMissed.length} 题</span>
+                {missedTag && (
+                  <button
+                    onClick={() => setMissedTag(null)}
+                    className="ml-auto text-[10px] font-normal normal-case text-ide-accent hover:underline"
+                  >
+                    清除筛选「{missedTag}」
+                  </button>
+                )}
+              </div>
+
+              {/* weakness tag 筛选(数据有标签时才显示) */}
+              {missedAllTags.length > 0 && (
+                <div className="mb-2 flex flex-wrap gap-1">
+                  {missedAllTags.map((tg) => (
+                    <button
+                      key={tg}
+                      onClick={() => setMissedTag(missedTag === tg ? null : tg)}
+                      className={cn(
+                        "px-1.5 py-0.5 text-[10px]",
+                        missedTag === tg
+                          ? "bg-ide-accent text-ide-accent-fg"
+                          : "bg-ide-bg-alt text-ide-fg-muted hover:text-ide-fg"
+                      )}
+                    >
+                      {tg}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {filteredMissed.length === 0 ? (
+                <div className="py-2 text-xs text-ide-fg-muted">
+                  {missedQuestions.length === 0
+                    ? "暂无错题。练习中把答错的题标记为错题,即可在这里跨会话复习。"
+                    : "该筛选下没有错题。"}
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {filteredMissed.map((q) => {
+                    const expanded = missedExpanded === q.question;
+                    return (
+                      <div key={q.question} className="border border-ide-border bg-ide-bg-alt p-2 text-xs">
+                        <button
+                          onClick={() => setMissedExpanded(expanded ? null : q.question)}
+                          className="block w-full text-left"
+                          title={expanded ? "收起" : "展开看参考答案"}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="min-w-0 flex-1 truncate font-medium text-ide-fg">{clip(q.question)}</span>
+                            <span className="shrink-0 bg-ide-danger/20 px-1.5 py-0.5 text-[10px] text-ide-danger">
+                              错 {q.missedCount ?? 1} 次
+                            </span>
+                            {q.lastMissedAt && (
+                              <span className="shrink-0 text-[10px] text-ide-fg-muted">{formatTime(q.lastMissedAt)}</span>
+                            )}
+                          </div>
+                          <div className="mt-1 truncate text-[11px] text-ide-fg-muted">
+                            我的回答:{clip(q.answer) || "(无记录)"}
+                          </div>
+                        </button>
+
+                        {(q.weaknessTags || []).length > 0 && (
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {(q.weaknessTags || []).slice(0, 4).map((tg) => (
+                              <button
+                                key={tg}
+                                onClick={() => setMissedTag(tg)}
+                                title="按此短板筛选"
+                                className="bg-ide-danger/10 px-1 py-0.5 text-[10px] text-ide-danger hover:bg-ide-danger/20"
+                              >
+                                {tg}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+
+                        {expanded && (
+                          <div className="mt-2 border-t border-ide-border pt-2">
+                            <div className="mb-1 text-ide-fg-muted">题目全文</div>
+                            <div className="mb-2 whitespace-pre-wrap text-ide-fg">{q.question}</div>
+                            <div className="mb-1 text-ide-fg-muted">我的最后回答</div>
+                            <div className="mb-2 whitespace-pre-wrap text-ide-fg">{q.answer || "(无记录)"}</div>
+                            <div className="mb-1 text-ide-fg-muted">参考答案</div>
+                            {q.betterAnswer ? (
+                              <div className="whitespace-pre-wrap text-ide-success">{q.betterAnswer}</div>
+                            ) : (
+                              <div className="text-[11px] text-ide-fg-muted">
+                                暂无参考答案(该题评估时未生成"更好的回答")
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        <div className="mt-2 flex justify-end">
+                          <button
+                            onClick={() => navigate(`/interview?focus=${encodeURIComponent(q.question)}`)}
+                            title="带着这道题去练习页"
+                            className="flex h-6 items-center gap-1 border border-ide-border bg-ide-bg px-2 text-[11px] text-ide-fg hover:bg-ide-accent/10 hover:text-ide-accent"
+                          >
+                            <Sparkles size={11} />
+                            去练这道
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* 评估报告区 */}
           <div className="border-b border-ide-border">

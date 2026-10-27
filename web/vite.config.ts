@@ -24,13 +24,15 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        // ⚠️ 只列确实存在的依赖名。写不存在的包(如 monaco-editor,它未在
-        // package.json 中声明)会让 Rollup 解析异常并可能 OOM。
+        // ⚠️ 只列确实存在的依赖名。写不存在的包会让 Rollup 解析异常并可能 OOM。
         manualChunks: {
-          // 图表库:仅历史页/评估页用得到
-          charts: ["recharts"],
           // 图标:全站都在用,但可并行下载不阻塞首屏渲染
           icons: ["lucide-react"],
+          // 注:charts(recharts)不再手动拆 —— 对象式 manualChunks 会把
+          // react-dom/scheduler 一并 hoist 进 charts chunk,导致入口 chunk
+          // 静态 import charts → index.html modulepreload 预载 545KB 图表库。
+          // 现在 recharts 只被懒加载组件(EmptyStateHome 雷达 / HistoryPage 曲线)
+          // 引用,Rollup 会自动拆成仅动态引用的共享 chunk,不进首屏关键路径。
         },
       },
     },

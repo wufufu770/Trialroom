@@ -9,6 +9,7 @@ import { ensureAdminFromEnv } from "./auth.mjs";
 import { createRateLimiter } from "../rateLimiter.js";
 import * as payment from "./routes/payment.mjs";
 import * as roomsRoutes from "./routes/rooms.mjs";
+import { router as mcpTokensRouter } from "./routes/mcp-tokens.mjs";
 import { trackEvent } from "./rooms.mjs";
 import { buildAuthStartUrl, loginWithAuthCode, consumeState } from "./auth-alipay.mjs";
 import { scheduleReconciliation } from "./payment/reconcile.mjs";
@@ -22,6 +23,7 @@ export function mountPlatform(app) {
 
   app.use("/api/platform", payment.router);
   app.use("/api/platform", roomsRoutes.router);
+  app.use("/api/platform/mcp-tokens", mcpTokensRouter); // 商业化 #3:MCP 令牌自助
 
   // 根作用域公开端点的独立限流(审查 F6/P0-1:此前 /track、/pay、/mcp 全部零限流)
   const publicLimiter = createRateLimiter({ windowMs: 60_000, max: 30, label: "public-root" });

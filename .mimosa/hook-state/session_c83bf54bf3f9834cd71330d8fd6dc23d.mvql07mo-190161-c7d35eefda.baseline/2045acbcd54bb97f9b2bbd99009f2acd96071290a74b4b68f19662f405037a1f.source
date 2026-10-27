@@ -141,6 +141,7 @@ test("ask_next_question:同请求键重放返回同一结果;换键推进;非房
   const r1 = await call("req-1", 14);
   assert.equal(r1.status, 200);
   const p1 = JSON.parse(r1.json.result.content[0].text);
+  globalThis.__qSnippet = String(p1.question ?? p1.title ?? "题").slice(0, 4);
   assert.equal(p1.turn_index, 1);
   const r2 = await call("req-1", 15);
   const p2 = JSON.parse(r2.json.result.content[0].text);
@@ -172,7 +173,7 @@ test("submit_self_review:同房同轮同座幂等替换为一行", async () => {
 
 test("evidence.search:只检索本人房间,带 no-spoilers 说明", async () => {
   const r = await rpc(hostToken, { jsonrpc: "2.0", id: 19, method: "tools/call",
-    params: { name: "evidence.search", arguments: { query: "第 1 题" } } });
+    params: { name: "evidence.search", arguments: { query: globalThis.__qSnippet ?? "题" } } });
   const payload = JSON.parse(r.json.result.content[0].text);
   assert.ok(payload.results.length >= 1);
   assert.ok(payload.results.every((x) => x.room_id === HOST), "不得跨房泄漏");

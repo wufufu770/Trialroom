@@ -134,6 +134,7 @@ function assertGatewaySafe() {
 }
 
 /** 签名并 POST 网关(OpenAPI 表单协议),返回响应 JSON 的对应业务段。 */
+export const GATEWAY_TIMEOUT_MS = 10_000; // 网关调用硬超时:防对账/退款路径被慢响应拖死(R3)
 export async function gatewayCall(method, bizContent) {
   if (!isConfigured()) throw new Error("支付宝三要素未配置");
   assertGatewaySafe();
@@ -148,6 +149,7 @@ export async function gatewayCall(method, bizContent) {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body,
+    signal: AbortSignal.timeout(GATEWAY_TIMEOUT_MS),
   });
   const j = await res.json();
   const key = method.replace(/\./g, "_") + "_response";
