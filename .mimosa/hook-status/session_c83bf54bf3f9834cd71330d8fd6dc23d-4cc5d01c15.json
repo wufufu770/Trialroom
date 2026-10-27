@@ -1,14 +1,14 @@
 {
   "schemaVersion": "mimosa-hook-status/v1",
-  "recordedAt": "2026-10-27T03:56:04.879Z",
+  "recordedAt": "2026-10-27T04:16:58.592Z",
   "sessionId": "session_c83bf54bf3f9834cd71330d8fd6dc23d",
   "event": "PostToolUse",
   "toolName": "Edit",
-  "file": "tools/check-license-dist.mjs",
+  "file": "qa/PLATFORM_TEST_REPORT.md",
   "outcome": "clear",
   "coverage": "complete",
   "findingCount": 0,
-  "durationMs": 19,
+  "durationMs": 20,
   "hostState": "hook_complete",
   "reportHint": ".mimosa/reports/"
 }

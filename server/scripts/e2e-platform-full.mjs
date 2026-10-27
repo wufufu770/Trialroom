@@ -58,6 +58,8 @@ async function waitReady() {
 const sha256Hex = (s) => crypto.createHash("sha256").update(s).digest("hex");
 const p95 = (xs) => xs.slice(Math.floor(xs.length * 0.95))[0] ?? xs.at(-1);
 
+let lastRaw = null; // 诊断:MCP 最后一次原始响应(FATAL 时带出)
+
 try {
   await waitReady();
   step("L2-01 服务启动 + 健康检查(未认证)", (await fetch(`${BASE}/api/health`)).ok);
@@ -100,17 +102,21 @@ try {
   step("M1 MCP 无 token 401", mcpNoAuth.status === 401);
   const mcpToken = "mt_e2e_secret";
   const db = new Database(path.join(TMP, "trialroom.db"));
-  const hostUser = db.prepare("SELECT user_id FROM api_tokens LIMIT 1").get();
+  // 确定性挂靠:必须用「房主」用户(dev-token 返回的 user_id)。
+  // 此前 SELECT ... LIMIT 1 无序取行,时而取到 admin/访客 —— ask 判 is_host
+  // 正确拒绝(404),造成 E2E 间歇性 FATAL(D5,测试基建缺陷,业务逻辑无恙)。
   db.prepare(`INSERT INTO mcp_tokens (token_id, token_hash, user_id, scopes) VALUES ('tk_e2e', ?, ?, '["rooms:read","rooms:join","rooms:advance","evidence:read"]')`)
-    .run(sha256Hex(mcpToken), hostUser.user_id);
+    .run(sha256Hex(mcpToken), host.user_id);
   const call = (body, extraHeaders = {}) => fetch(`${BASE}/mcp`, {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${mcpToken}`, ...extraHeaders },
     body: JSON.stringify(body),
-  }).then(async (r) => ({ status: r.status, json: await r.json().catch(() => null) }));
+  }).then(async (r) => { const j = await r.json().catch(() => null); lastRaw = `${r.status}:${JSON.stringify(j)?.slice(0, 200)}`; return { status: r.status, json: j }; });
 
   const init = await call({ jsonrpc: "2.0", id: 2, method: "initialize" });
   step("M2 MCP initialize", init.json?.result?.protocolVersion === "2026-07-28");
+  // 注:/mcp 限流 30/min(P0-1 加固)。本 E2E 全程 MCP 调用预算 ≤ 30:
+  // M2..M7 共 8 次 + 性能采样 15 次 initialize;tools/list 只采样一次在 M4。
   const hdr = await call({ jsonrpc: "2.0", id: 3, method: "tools/list" }, { "mcp-method": "initialize" });
   step("M3 S-11 头体不一致 -32020", hdr.status === 400 && hdr.json.error.code === -32020);
   const listing = await call({ jsonrpc: "2.0", id: 4, method: "tools/list" });
@@ -137,21 +143,21 @@ try {
   }
   step("P3 埋点限流生效(30/min)", limited > 0 && lastStatus === 429, `429×${limited}`);
 
-  // —— 性能冒烟 ——
+  // —— 性能冒烟(注意限流预算:/mcp 30/min、/api 120/min) ——
   const t = (fn) => async () => { const t0 = performance.now(); await fn(); return performance.now() - t0; };
   const latOrder = [], latMcp = [];
   for (let i = 0; i < 50; i++) {
-    const a = await t(() => json("POST", "/api/platform/orders", { token: host.token, body: { product_code: "single_390", idempotency_key: `perf-${i}` } }))();
-    latOrder.push(a);
-    const b = await t(() => call({ jsonrpc: "2.0", id: 100 + i, method: "tools/list" }))();
-    latMcp.push(b);
+    latOrder.push(await t(() => json("POST", "/api/platform/orders", { token: host.token, body: { product_code: "single_390", idempotency_key: `perf-${i}` } }))());
+  }
+  for (let i = 0; i < 15; i++) {
+    latMcp.push(await t(() => call({ jsonrpc: "2.0", id: 500 + i, method: "initialize" }))());
   }
   const perf = { order_p95ms: Math.round(p95(latOrder.slice().sort((x, y) => x - y))), mcp_p95ms: Math.round(p95(latMcp.slice().sort((x, y) => x - y))) };
-  step("PERF 热路径 p95 < 500ms(本机)", perf.order_p95ms < 500 && perf.mcp_p95ms < 500, JSON.stringify(perf));
+  step("PERF 热路径 p95 < 500ms(本机,mock 轨)", perf.order_p95ms < 500 && perf.mcp_p95ms < 500, JSON.stringify(perf));
 
   db.close();
 } catch (e) {
-  step("FATAL", false, e.message);
+  step("FATAL", false, `${e.message}${lastRaw ? ` | 最后 MCP 响应: ${lastRaw}` : ""}`);
 } finally {
   server.kill("SIGTERM");
   await new Promise((r) => setTimeout(r, 300));
