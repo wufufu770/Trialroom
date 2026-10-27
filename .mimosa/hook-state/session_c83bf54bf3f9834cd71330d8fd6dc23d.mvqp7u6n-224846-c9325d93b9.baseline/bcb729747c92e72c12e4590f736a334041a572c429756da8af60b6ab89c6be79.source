@@ -4,7 +4,6 @@
 // v5:多 Agent 协同 + 会话难度 + 整场评价 + 会话分组 + Agent 图标上传
 // v9:认证 + CORS 白名单 + 安全头 + 优雅关闭 + 健康检查深化 + SSRF DNS 校验 + token 配额
 import express from "express";
-import cors from "cors";
 import multer from "multer";
 import mammoth from "mammoth";
 import * as questionBank from "./services/questionBank.js";

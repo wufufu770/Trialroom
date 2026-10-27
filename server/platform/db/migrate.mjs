@@ -70,13 +70,20 @@ export function checkMigrations(db) {
 const IS_MAIN = process.argv[1] && import.meta.url === `file://${process.argv[1]}`;
 if (IS_MAIN) {
   const dbPath = process.argv.find((a) => a.endsWith(".db")) ?? null;
-  const db = dbPath ? new Database(dbPath) : new Database(":memory:");
   if (process.argv.includes("--check")) {
+    // --check 面向既有部署库;不带库文件时退到内存库只会得到"全部未应用"的
+    // 误导性失败(重跑验证时踩过) —— 显式报用法错误而非假红。
+    if (!dbPath) {
+      console.error("用法:node platform/db/migrate.mjs --check <path/to/trialroom.db>(--check 需要目标库)");
+      process.exit(2);
+    }
+    const db = new Database(dbPath);
     const r = checkMigrations(db);
     if (!r.ok) { console.error(`迁移检查失败:${r.reason}`); process.exit(1); }
     console.log(`迁移检查通过:${listMigrationFiles().length} 个文件全部就绪`);
     process.exit(0);
   }
+  const db = dbPath ? new Database(dbPath) : new Database(":memory:");
   const pending = applyMigrations(db);
   console.log(pending.length ? `已应用 ${pending.length} 个迁移:${pending.join(", ")}` : "无待应用迁移");
 }

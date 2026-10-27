@@ -1,0 +1,912 @@
+{
+  "schema_version": "mimosa-task-review/v2",
+  "run_id": "20261027T125046348Z-218800-bb794b5e4009",
+  "run_status": "inconclusive",
+  "errors": [
+    {
+      "stage": "candidate-select",
+      "target": "server/package-lock.json",
+      "reason": "candidate_limit_exceeded: 6 changed reviewable file(s) were not scanned because the limit is 20"
+    },
+    {
+      "stage": "baseline-read",
+      "target": "web/src/components/RoomChatView.tsx",
+      "reason": "baseline_snapshot_unreadable: file is missing from task baseline"
+    },
+    {
+      "stage": "scan",
+      "target": "server/test/platform-questions.test.js",
+      "reason": "scanner_failed: spawnSync /usr/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "scan",
+      "target": "web/src/pages/PlatformPage.tsx",
+      "reason": "scanner_failed: spawnSync /usr/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "scan",
+      "target": "server/test/platform-r3-security.test.js",
+      "reason": "scanner_failed: spawnSync /usr/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "scan",
+      "target": "server/test/platform-referral.test.js",
+      "reason": "scanner_failed: spawnSync /usr/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "scan",
+      "target": "web/src/lib/monacoLoader.ts",
+      "reason": "scanner_failed: spawnSync /usr/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "scan",
+      "target": "web/src/pages/AgentPage.tsx",
+      "reason": "scanner_failed: spawnSync /usr/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "scan",
+      "target": "web/src/components/interview/MessageInput.tsx",
+      "reason": "scanner_failed: spawnSync /usr/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "scan",
+      "target": "web/vite.config.ts",
+      "reason": "scanner_failed: spawnSync /usr/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "scan",
+      "target": "web/src/pages/GroupInterviewPage.tsx",
+      "reason": "scanner_failed: spawnSync /usr/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "scan",
+      "target": "web/src/pages/HistoryPage.tsx",
+      "reason": "scanner_failed: spawnSync /usr/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "scan",
+      "target": "web/src/pages/InterviewPage.tsx",
+      "reason": "scanner_failed: spawnSync /usr/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "scan",
+      "target": "web/src/pages/LandingPage.tsx",
+      "reason": "scanner_failed: spawnSync /usr/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "scan",
+      "target": "web/src/components/EmptyStateHome.tsx",
+      "reason": "scanner_failed: spawnSync /usr/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "scan",
+      "target": "web/src/components/RoomChatView.tsx",
+      "reason": "scanner_failed: spawnSync /usr/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "scan",
+      "target": "web/src/api/client.ts",
+      "reason": "scanner_failed: spawnSync /usr/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "scan",
+      "target": "web/src/api/platform.ts",
+      "reason": "scanner_failed: spawnSync /usr/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "scan",
+      "target": "server/db.js",
+      "reason": "scanner_failed: spawnSync /usr/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "supply-chain-check",
+      "target": ".",
+      "reason": "stop_budget_exhausted: focused supply-chain check was not run before the gate budget"
+    }
+  ],
+  "coverage": {
+    "schema_version": "mimosa-hook-coverage/v1",
+    "status": "partial",
+    "scope": "hook_observed_diff",
+    "baseline": {
+      "complete": true,
+      "captured_files": 236,
+      "candidate_limit": 5000,
+      "truncated": false,
+      "enumeration_error_count": 0,
+      "snapshot_error_count": 0,
+      "compensated_target_count": 23
+    },
+    "change_tracking": {
+      "touched_observed": 7,
+      "touched_retained": 7,
+      "truncated": false,
+      "bash_mutation": true,
+      "bash_discovered": 26,
+      "bash_discovery_limit": 80,
+      "bash_discovery_truncated": false
+    },
+    "candidates": {
+      "eligible_files": 26,
+      "selected_files": 20,
+      "limit": 20,
+      "truncated": true
+    },
+    "scanning": {
+      "required_files": 17,
+      "scanned_files": 0,
+      "skipped_files": 0,
+      "failed_files": 17,
+      "project_checks_required": 1,
+      "project_checks_completed": 0
+    },
+    "notification": {
+      "eligible_findings": 0,
+      "detailed_findings": 0,
+      "detail_limit": 3,
+      "truncated": false
+    },
+    "reason_counts": {
+      "candidate_limit_exceeded": 1,
+      "baseline_snapshot_unreadable": 1,
+      "scanner_failed": 17,
+      "stop_budget_exhausted": 1,
+      "project_check_failed": 20
+    },
+    "reasons": [
+      {
+        "code": "candidate_limit_exceeded",
+        "stage": "candidate-select",
+        "target": "server/package-lock.json",
+        "detail": "6 changed reviewable file(s) were not scanned because the limit is 20",
+        "affects_completion": true
+      },
+      {
+        "code": "baseline_snapshot_unreadable",
+        "stage": "baseline-read",
+        "target": "web/src/components/RoomChatView.tsx",
+        "detail": "file is missing from task baseline",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "server/test/platform-questions.test.js",
+        "detail": "spawnSync /usr/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "web/src/pages/PlatformPage.tsx",
+        "detail": "spawnSync /usr/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "server/test/platform-r3-security.test.js",
+        "detail": "spawnSync /usr/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "server/test/platform-referral.test.js",
+        "detail": "spawnSync /usr/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "web/src/lib/monacoLoader.ts",
+        "detail": "spawnSync /usr/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "web/src/pages/AgentPage.tsx",
+        "detail": "spawnSync /usr/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "web/src/components/interview/MessageInput.tsx",
+        "detail": "spawnSync /usr/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "web/vite.config.ts",
+        "detail": "spawnSync /usr/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "web/src/pages/GroupInterviewPage.tsx",
+        "detail": "spawnSync /usr/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "web/src/pages/HistoryPage.tsx",
+        "detail": "spawnSync /usr/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "web/src/pages/InterviewPage.tsx",
+        "detail": "spawnSync /usr/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "web/src/pages/LandingPage.tsx",
+        "detail": "spawnSync /usr/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "web/src/components/EmptyStateHome.tsx",
+        "detail": "spawnSync /usr/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "web/src/components/RoomChatView.tsx",
+        "detail": "spawnSync /usr/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "web/src/api/client.ts",
+        "detail": "spawnSync /usr/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "web/src/api/platform.ts",
+        "detail": "spawnSync /usr/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "server/db.js",
+        "detail": "spawnSync /usr/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "stop_budget_exhausted",
+        "stage": "supply-chain-check",
+        "target": ".",
+        "detail": "focused supply-chain check was not run before the gate budget",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "candidate-select",
+        "target": "server/package-lock.json",
+        "detail": "candidate_limit_exceeded: 6 changed reviewable file(s) were not scanned because the limit is 20",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "baseline-read",
+        "target": "web/src/components/RoomChatView.tsx",
+        "detail": "baseline_snapshot_unreadable: file is missing from task baseline",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "server/test/platform-questions.test.js",
+        "detail": "scanner_failed: spawnSync /usr/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "web/src/pages/PlatformPage.tsx",
+        "detail": "scanner_failed: spawnSync /usr/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "server/test/platform-r3-security.test.js",
+        "detail": "scanner_failed: spawnSync /usr/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "server/test/platform-referral.test.js",
+        "detail": "scanner_failed: spawnSync /usr/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "web/src/lib/monacoLoader.ts",
+        "detail": "scanner_failed: spawnSync /usr/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "web/src/pages/AgentPage.tsx",
+        "detail": "scanner_failed: spawnSync /usr/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "web/src/components/interview/MessageInput.tsx",
+        "detail": "scanner_failed: spawnSync /usr/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "web/vite.config.ts",
+        "detail": "scanner_failed: spawnSync /usr/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "web/src/pages/GroupInterviewPage.tsx",
+        "detail": "scanner_failed: spawnSync /usr/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "web/src/pages/HistoryPage.tsx",
+        "detail": "scanner_failed: spawnSync /usr/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "web/src/pages/InterviewPage.tsx",
+        "detail": "scanner_failed: spawnSync /usr/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "web/src/pages/LandingPage.tsx",
+        "detail": "scanner_failed: spawnSync /usr/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "web/src/components/EmptyStateHome.tsx",
+        "detail": "scanner_failed: spawnSync /usr/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "web/src/components/RoomChatView.tsx",
+        "detail": "scanner_failed: spawnSync /usr/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "web/src/api/client.ts",
+        "detail": "scanner_failed: spawnSync /usr/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "web/src/api/platform.ts",
+        "detail": "scanner_failed: spawnSync /usr/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "server/db.js",
+        "detail": "scanner_failed: spawnSync /usr/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "supply-chain-check",
+        "target": ".",
+        "detail": "stop_budget_exhausted: focused supply-chain check was not run before the gate budget",
+        "affects_completion": true
+      }
+    ],
+    "reasons_truncated": false
+  },
+  "generated_at": "2026-10-27T12:50:46.348Z",
+  "session_id": "session_c83bf54bf3f9834cd71330d8fd6dc23d",
+  "target": ".",
+  "revision": "a3fad9e04d8be7b3d88a5309b15d578db4279947",
+  "rules_version": "unavailable",
+  "diff_hash": "66286ff6c4da24e11ddbf1cc696927cc44a0b60bba9b4c767f99e52172ffa6ab",
+  "diff": {
+    "algorithm": "sha256",
+    "changed_file_count": 18,
+    "changed_files": [
+      {
+        "file": "server/db.js",
+        "ranges": [
+          {
+            "start": 1216,
+            "end": 1236
+          }
+        ],
+        "before_hash": "3c17e467973a9a0d05d73661f64d076da81207480c337ef968219d2d9aecc595",
+        "after_hash": "6a2a765a98a4939ae8269220c95ba20f81ffddf1d293eb61f549e9ea3f8e49e6"
+      },
+      {
+        "file": "server/test/platform-questions.test.js",
+        "ranges": [
+          {
+            "start": 53,
+            "end": 53
+          },
+          {
+            "start": 59,
+            "end": 62
+          },
+          {
+            "start": 64,
+            "end": 64
+          }
+        ],
+        "before_hash": "50ecdccf51b18b7122a21976e85bd08cab046eda443df1a6d10935c0bcc95cfe",
+        "after_hash": "0aa821eb182e341865b484fe0d5257b17fabd4d03d796ff81716b45f989cd40f"
+      },
+      {
+        "file": "server/test/platform-r3-security.test.js",
+        "ranges": [
+          {
+            "start": 58,
+            "end": 59
+          },
+          {
+            "start": 61,
+            "end": 61
+          }
+        ],
+        "before_hash": "10e97b8bfaf43bc94b333325004953426c851e6fa39859a8176da4f69b7ca1fc",
+        "after_hash": "a1a9e8b47ff144f496f7d26c2dc08507873bb2d0416573c1bce4605bb5492f87"
+      },
+      {
+        "file": "server/test/platform-referral.test.js",
+        "ranges": [
+          {
+            "start": 195,
+            "end": 197
+          },
+          {
+            "start": 199,
+            "end": 199
+          },
+          {
+            "start": 210,
+            "end": 214
+          },
+          {
+            "start": 218,
+            "end": 238
+          }
+        ],
+        "before_hash": "5632695cfb44a00a1b72ff99133492c9b696b1ac5bd9749376867e2838c4e611",
+        "after_hash": "937d1e1a3e59d38465bce88f8c41f6beb9cba82192f2ea641c822032af5616a1"
+      },
+      {
+        "file": "web/package-lock.json",
+        "ranges": [
+          {
+            "start": 1498,
+            "end": 1499
+          },
+          {
+            "start": 2173,
+            "end": 2173
+          },
+          {
+            "start": 2670,
+            "end": 2670
+          },
+          {
+            "start": 2723,
+            "end": 2723
+          }
+        ],
+        "before_hash": "83d0a7795dcf28e293a108dc9e2a7775dd71f68b426b93ff5fc4776f675c46a3",
+        "after_hash": "c96f7d29b29be4b9d07a6d5170703486a4fb00f0a7ffbb3ce70ea266dbb6efcc"
+      },
+      {
+        "file": "web/src/api/client.ts",
+        "ranges": [
+          {
+            "start": 345,
+            "end": 347
+          }
+        ],
+        "before_hash": "f1f31045b6ce8b02e7e4e62dae1bc56c50dbbc34be5c2aa00211facc4e97b402",
+        "after_hash": "4179a6e870297454b53a4b9361fe3db57626edf571649b8b2df34cb067b14a0a"
+      },
+      {
+        "file": "web/src/api/platform.ts",
+        "ranges": [
+          {
+            "start": 6,
+            "end": 8
+          },
+          {
+            "start": 30,
+            "end": 39
+          },
+          {
+            "start": 53,
+            "end": 56
+          },
+          {
+            "start": 64,
+            "end": 65
+          },
+          {
+            "start": 79,
+            "end": 79
+          },
+          {
+            "start": 84,
+            "end": 97
+          }
+        ],
+        "before_hash": "fba198d889fd593b94f26f7af0880a7515399af3adfa978ac7b15631f65b8c7d",
+        "after_hash": "b1ab7433aaaaaa1e6acf7e5f2110ddbc8c11e4e19429c8ca36ba670c47fd254e"
+      },
+      {
+        "file": "web/src/components/EmptyStateHome.tsx",
+        "ranges": [
+          {
+            "start": 3,
+            "end": 3
+          },
+          {
+            "start": 10,
+            "end": 16
+          },
+          {
+            "start": 192,
+            "end": 202
+          }
+        ],
+        "before_hash": "81de865848e636d079e2846813c0a51b65d89236300c5b1234fea2a68c896e71",
+        "after_hash": "a14e761140e468b23acf8e877d9cf6dc39126d0658db64fd026cb678051435dd"
+      },
+      {
+        "file": "web/src/components/interview/MessageInput.tsx",
+        "ranges": [
+          {
+            "start": 5,
+            "end": 5
+          }
+        ],
+        "before_hash": "3bffb4956a812573e494495b72e576c802fa54abd1f9e370b22441e79929938a",
+        "after_hash": "4a4c9ba24061667058c1575f9604a5de96ac82b5a728778662c3e948342b96eb"
+      },
+      {
+        "file": "web/src/components/RoomChatView.tsx",
+        "ranges": [
+          {
+            "start": 1,
+            "end": 170
+          }
+        ],
+        "before_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "after_hash": "1aa6bbde7c1f2b0120ba95cbd371ddf307f1b1ff5609ed6bc43ee8232cdbab67"
+      },
+      {
+        "file": "web/src/lib/monacoLoader.ts",
+        "ranges": [
+          {
+            "start": 1,
+            "end": 10
+          }
+        ],
+        "before_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "after_hash": "3569a3df48f9a6a256e167789f156b0b95a8fbd369c11c3d9ada27a525637287"
+      },
+      {
+        "file": "web/src/pages/AgentPage.tsx",
+        "ranges": [
+          {
+            "start": 2,
+            "end": 2
+          }
+        ],
+        "before_hash": "53a8be295cca044063528937e88793e6fa221c43b26ad9ce413046edab616648",
+        "after_hash": "8a42a30e05f68463aeda279f8a9abef22b1f4a9ca67a9814dbff4f86ee94f573"
+      },
+      {
+        "file": "web/src/pages/GroupInterviewPage.tsx",
+        "ranges": [
+          {
+            "start": 5,
+            "end": 5
+          },
+          {
+            "start": 19,
+            "end": 19
+          },
+          {
+            "start": 577,
+            "end": 579
+          },
+          {
+            "start": 622,
+            "end": 728
+          }
+        ],
+        "before_hash": "356bb48c5266cddaba7323b74e8c098ce7b603b613ce8770d4f8270725575674",
+        "after_hash": "66d1cf8947beee2e57acb2c60e2d39b58aa90f6a06115c4778a9ad69a37bf548"
+      },
+      {
+        "file": "web/src/pages/HistoryPage.tsx",
+        "ranges": [
+          {
+            "start": 2,
+            "end": 2
+          },
+          {
+            "start": 27,
+            "end": 38
+          },
+          {
+            "start": 94,
+            "end": 100
+          },
+          {
+            "start": 113,
+            "end": 132
+          },
+          {
+            "start": 239,
+            "end": 247
+          },
+          {
+            "start": 708,
+            "end": 825
+          }
+        ],
+        "before_hash": "6d6991e6d96126c436e89b8dcd3f541b61bc79dc9f8b9d2a25d2a39590faca33",
+        "after_hash": "6bb15a95c48bbfbd713274f1e751cf924694362dd2c8dc0dfc59822e401858ea"
+      },
+      {
+        "file": "web/src/pages/InterviewPage.tsx",
+        "ranges": [
+          {
+            "start": 2,
+            "end": 2
+          },
+          {
+            "start": 4,
+            "end": 4
+          },
+          {
+            "start": 40,
+            "end": 40
+          },
+          {
+            "start": 200,
+            "end": 213
+          },
+          {
+            "start": 250,
+            "end": 256
+          },
+          {
+            "start": 756,
+            "end": 771
+          },
+          {
+            "start": 864,
+            "end": 864
+          },
+          {
+            "start": 1228,
+            "end": 1243
+          },
+          {
+            "start": 1266,
+            "end": 1267
+          },
+          {
+            "start": 1308,
+            "end": 1309
+          },
+          {
+            "start": 1315,
+            "end": 1315
+          },
+          {
+            "start": 1397,
+            "end": 1409
+          },
+          {
+            "start": 1665,
+            "end": 1704
+          }
+        ],
+        "before_hash": "ba62c28889346acbc129d86047652738a5c2de8189c35530853c52bf8b7424f3",
+        "after_hash": "a8866dda63cf81facdb489abf27612b38f5b2136513acc1377de84473b8f9efe"
+      },
+      {
+        "file": "web/src/pages/LandingPage.tsx",
+        "ranges": [
+          {
+            "start": 3,
+            "end": 3
+          },
+          {
+            "start": 6,
+            "end": 7
+          },
+          {
+            "start": 17,
+            "end": 19
+          },
+          {
+            "start": 96,
+            "end": 99
+          },
+          {
+            "start": 123,
+            "end": 153
+          }
+        ],
+        "before_hash": "9811db63587d9ea4a8da5214ebbd9f8a3715560a57bf82d4908b6a663e921e77",
+        "after_hash": "c448f1701b69a2b69100a1b658827bd8a26b64006520cb6ca33d4f6e2fcc050b"
+      },
+      {
+        "file": "web/src/pages/PlatformPage.tsx",
+        "ranges": [
+          {
+            "start": 6,
+            "end": 7
+          },
+          {
+            "start": 28,
+            "end": 28
+          },
+          {
+            "start": 47,
+            "end": 84
+          },
+          {
+            "start": 86,
+            "end": 136
+          },
+          {
+            "start": 154,
+            "end": 155
+          },
+          {
+            "start": 176,
+            "end": 176
+          },
+          {
+            "start": 207,
+            "end": 207
+          },
+          {
+            "start": 228,
+            "end": 241
+          },
+          {
+            "start": 257,
+            "end": 260
+          },
+          {
+            "start": 279,
+            "end": 283
+          },
+          {
+            "start": 385,
+            "end": 385
+          },
+          {
+            "start": 398,
+            "end": 478
+          },
+          {
+            "start": 530,
+            "end": 531
+          }
+        ],
+        "before_hash": "574839c072d4b0d423eade309c8aa7271eb0ace3add916629441d8f6a2a2da22",
+        "after_hash": "9f956f1f2a8840b3b62ace814ea11632b4dd9ed6f9df209addf91d2fcd72f9b7"
+      },
+      {
+        "file": "web/vite.config.ts",
+        "ranges": [
+          {
+            "start": 27,
+            "end": 27
+          },
+          {
+            "start": 31,
+            "end": 35
+          }
+        ],
+        "before_hash": "0c56bf1425ca885e2ac1811898e292cf97e989ecdeba8b2a7e1510595f0b3349",
+        "after_hash": "1f4b4daf27834daa4a61a3730ab5632cfaf6530fe19b39cc71ecef93c5ce4500"
+      }
+    ]
+  },
+  "timing": {
+    "started_at": "2026-10-27T12:50:40.482Z",
+    "completed_at": "2026-10-27T12:50:46.348Z",
+    "duration_ms": 5866,
+    "measurement": "hook_wall_clock"
+  },
+  "tokens": {
+    "input": 0,
+    "output": 0,
+    "total": 0,
+    "model_calls": 0,
+    "measurement": "known-zero"
+  },
+  "telemetry": {
+    "schemaVersion": "mimosa-gate-telemetry/v1",
+    "profile": "gate",
+    "operation": "Stop",
+    "outcome": "partial/INCONCLUSIVE",
+    "latencyMs": 5866,
+    "peakMemoryBytes": 183934976,
+    "memoryMeasurement": "max-observed-process-rss",
+    "scannedFiles": 0,
+    "cache": {
+      "hits": 0,
+      "misses": 0,
+      "measurement": "not-applicable"
+    },
+    "denyCount": 0,
+    "tokens": {
+      "input": 0,
+      "output": 0,
+      "total": 0,
+      "modelCalls": 0,
+      "measurement": "known-zero"
+    }
+  },
+  "finding_count": 0,
+  "rewake_finding_count": 0,
+  "evidence_boundary": {
+    "scan": "candidate",
+    "static_fix_verification": "observed_static_only",
+    "runtime_verification": "not_performed"
+  },
+  "finding_events": [],
+  "findings": [],
+  "artifacts": {
+    "immutable_report": ".mimosa/reports/task-review-session_c83bf54bf3f9834cd71330d8fd6dc23d-20261027T125046348Z-218800-bb794b5e4009.json",
+    "latest_report": ".mimosa/reports/task-review-session_c83bf54bf3f9834cd71330d8fd6dc23d.json",
+    "history_summary": ".mimosa/history/run-20261027T125046348Z-218800-bb794b5e4009.json"
+  }
+}

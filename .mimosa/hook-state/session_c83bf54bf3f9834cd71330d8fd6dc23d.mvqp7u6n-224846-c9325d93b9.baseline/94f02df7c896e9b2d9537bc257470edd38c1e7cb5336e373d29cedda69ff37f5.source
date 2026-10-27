@@ -13,10 +13,12 @@ import {
   listAnswerRecordings,
   createQuestionFeedback,
   listQuestionFeedback,
+  listMissedQuestions,
   setQuestionMissed,
   deleteQuestionFeedback,
   getSession,
   getMaterialContent,
+  getActiveProvider,
   getTodayTokenUsage,
   recordTokenUsage,
   ValidationError,
@@ -51,6 +53,97 @@ function extractJson(content) {
   } catch {
     return null;
   }
+}
+
+// ---- 群面个人表现报告(纯函数 + 路由) ----
+// 背景:群面结束后用户发言无任何评估("玩完即丢")。
+// 本节:把群面消息中的用户发言提取 → 清洗 → 截断 → 单次 LLM 评估 → 强校验后返回。
+// 安全:发言进 LLM 前由 chatProxy 自带 PII 脱敏;此处额外做不可见字符清洗
+// (零宽字符/双向控制符,防提示注入伪装与长度统计失真,stripInvisibleChars 简版内联)。
+const GROUP_INVISIBLE_RE = /[\u200b-\u200f\u202a-\u202e\u2060\ufeff]/g;
+const GROUP_REPORT_MAX_MESSAGES = 40;   // 条数护栏
+const GROUP_REPORT_MAX_CHARS = 6000;    // 总长护栏(字符)
+const GROUP_REPORT_DIMENSIONS = [
+  ["logic", "逻辑思维"],
+  ["communication", "沟通表达"],
+  ["teamwork", "团队协作"],
+];
+
+// 清洗单条文本:去不可见字符 + 统一换行 + 去首尾空白
+function cleanGroupSpeech(s) {
+  return String(s || "")
+    .replace(GROUP_INVISIBLE_RE, "")
+    .replace(/\r\n?/g, "\n")
+    .trim();
+}
+
+// 纯函数:从群面消息中提取用户发言并拼接为评估文本。
+// 兼容两种消息形态:analysis 约定 {role:"user"} 与群面页原生的
+// {speakerKind:"user"} / {speakerId:"user"}(MeetingMessage 结构)。
+// 护栏:最多取 40 条;拼接总长超 6000 字符即截断(末尾标注)。
+// 返回拼接后的 transcript 字符串(无用户发言时返回空串)。
+export function buildGroupReportTranscript(messages) {
+  const list = Array.isArray(messages) ? messages : [];
+  const speeches = [];
+  for (const m of list) {
+    if (!m || typeof m !== "object") continue;
+    const isUser = m.role === "user" || m.speakerKind === "user" || m.speakerId === "user";
+    if (!isUser) continue;
+    const content = cleanGroupSpeech(m.content);
+    if (!content) continue;
+    speeches.push(content);
+    if (speeches.length >= GROUP_REPORT_MAX_MESSAGES) break;
+  }
+  if (speeches.length === 0) return "";
+  let transcript = speeches.join("\n");
+  if (transcript.length > GROUP_REPORT_MAX_CHARS) {
+    transcript = `${transcript.slice(0, GROUP_REPORT_MAX_CHARS)}\n…(发言过长,已截断)`;
+  }
+  return transcript;
+}
+
+// 纯函数:解析并强校验群面报告的 LLM 输出。
+// 任何不合法(JSON 解析失败/字段缺失/分数越界/列表为空)都抛 ValidationError
+// (全局错误处理器映射为 400 VALIDATION_ERROR),绝不返回未校验结构。
+// 合法输出:{dimensions:{logic,communication,teamwork 各 1-5 整数},
+//           strengths:[≤3 条非空字符串], improvements:[≤3 条非空字符串]}
+export function parseGroupReport(raw) {
+  const parsed = extractJson(raw);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new ValidationError("群面报告解析失败:模型输出不是合法 JSON 对象,请重试");
+  }
+  const dims = parsed.dimensions;
+  if (!dims || typeof dims !== "object" || Array.isArray(dims)) {
+    throw new ValidationError("群面报告解析失败:缺少 dimensions 字段,请重试");
+  }
+  const dimensions = {};
+  for (const [key, label] of GROUP_REPORT_DIMENSIONS) {
+    const v = Number(dims[key]);
+    if (!Number.isInteger(v) || v < 1 || v > 5) {
+      throw new ValidationError(
+        `群面报告解析失败:维度「${label}」分数缺失或越界(需 1-5 整数,实际为 ${JSON.stringify(dims[key]) ?? "undefined"})`,
+      );
+    }
+    dimensions[key] = v;
+  }
+  const toList = (value, label) => {
+    if (!Array.isArray(value)) {
+      throw new ValidationError(`群面报告解析失败:缺少 ${label} 列表,请重试`);
+    }
+    const items = value
+      .filter((x) => typeof x === "string" && x.trim())
+      .map((x) => x.trim())
+      .slice(0, 3);
+    if (items.length === 0) {
+      throw new ValidationError(`群面报告解析失败:${label} 列表为空,请重试`);
+    }
+    return items;
+  };
+  return {
+    dimensions,
+    strengths: toList(parsed.strengths, "strengths"),
+    improvements: toList(parsed.improvements, "improvements"),
+  };
 }
 
 // 音频 MIME 白名单(MediaRecorder 常见输出)
@@ -218,6 +311,14 @@ router.put("/answers/:feedbackId/missed", (req, res) => {
   res.ok({ ok: true, isMissed });
 });
 
+// GET /api/missed-questions 跨会话错题本(★3)
+// 聚合 question_feedback WHERE is_missed=1:按题干去重,保留最近一次
+// myAnswer/sessionId/时间与短板标签,累计 missed 次数,最近优先,默认 LIMIT 100。
+// 与同文件其他 analysis 路由一致,鉴权由全局 /api authMiddleware 覆盖(登录态私有)。
+router.get("/missed-questions", (req, res) => {
+  res.ok(listMissedQuestions(req.query.limit));
+});
+
 // DELETE /api/answers/:feedbackId 删除一条反馈
 router.delete("/answers/:feedbackId", (req, res) => {
   deleteQuestionFeedback(req.params.feedbackId);
@@ -274,6 +375,59 @@ ${jd ? `岗位 JD: ${clip(jd, JD_LIMIT)}` : ""}
       return res.ok({ ok: false, questions: [], error: "押题结果解析失败,请重试" });
     }
     res.ok({ ok: true, questions, degraded: !!result.degraded });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// ---- 群面个人表现报告 ----
+// POST /api/group-report  { provider?, messages: [{role, content}...], position? }
+// 鉴权:与同文件其他 analysis 路由一致,由全局 /api authMiddleware 覆盖(登录态私有)。
+// messages 兼容群面页原生 MeetingMessage 形态(role/speakerKind/speakerId 任一为 "user"
+// 即视为用户发言);provider 缺省时回退当前激活供应商。
+router.post("/group-report", async (req, res, next) => {
+  try {
+    const { provider, position } = req.body || {};
+    // 纯函数提取用户发言(含 40 条 / 6000 字符护栏),空串即无有效用户发言
+    const transcript = buildGroupReportTranscript(req.body?.messages);
+    if (!transcript) {
+      throw new ValidationError("没有可评估的用户发言(messages 中未找到非空的用户发言)");
+    }
+    const providerId = provider || getActiveProvider()?.providerId;
+    if (!providerId) {
+      throw new ValidationError("provider 为必填(或先在设置中激活一个模型供应商)");
+    }
+    assertBudget();
+
+    const pos = cleanGroupSpeech(position).slice(0, 200);
+    const prompt = `你是一位资深群面(无领导小组讨论)面试官,请仅基于下面这位候选人在群面中的全部发言,评估其个人表现。
+${pos ? `讨论主题/目标岗位: ${pos}\n` : ""}候选人发言记录(按时间顺序,已脱敏):
+${transcript}
+
+请从六个面试维度中选取以下三个维度打分(1-5 整数):logic=逻辑思维, communication=沟通表达, teamwork=团队协作。
+严格输出 JSON(不要输出其他内容,不要 markdown 代码块,不要输出思考过程/think 标签,字符串内不要使用换行):
+{"dimensions":{"logic":1到5的整数,"communication":1到5的整数,"teamwork":1到5的整数},"strengths":["优势1","优势2","优势3"(最多3条,每条一句话,须具体到其发言行为)],"improvements":["改进建议1","改进建议2","改进建议3"(最多3条,可执行)]}
+若发言过少不足以评估某维度,该维度给最低分并在 improvements 中说明。`;
+
+    // 单次 LLM 调用:复用 chatProxy 故障转移 + PII 脱敏 + token 记账
+    const result = await chatProxy(providerId, {
+      messages: [{ role: "user", content: prompt }],
+      stream: false,
+      maxTokens: 600,
+      temperature: 0.3,
+    }, null, makeUsageRecorder(providerId, null));
+
+    // 解析容错:任何不合法都以 400 VALIDATION 透出(带原因与模型输出片段便于排查),
+    // 绝不把未校验结构返回给客户端
+    let report;
+    try {
+      report = parseGroupReport(result?.content);
+    } catch (e) {
+      const rawPreview = String(result?.content || "").slice(0, 200);
+      throw new ValidationError(`${e instanceof Error ? e.message : "群面报告解析失败"}(模型输出片段: ${rawPreview})`);
+    }
+
+    res.ok({ ok: true, report, degraded: !!result.degraded });
   } catch (e) {
     next(e);
   }

@@ -1,8 +1,10 @@
 // 落地页(公开):产品主张 + 定价 + 分享入座深链 + 埋点六事件之首(landing_uv)
 // 分享卡形态:?code=123456 → 高亮入座入口(房主从工作台复制的邀请链接)
+// 返利归因:?inv=<邀请人 user_id> → localStorage('trialroom:inv'),收银台下单时附带
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { platformApi, track } from "@/api/platform";
+import { platformApi, track, INVITE_BY_KEY } from "@/api/platform";
+import { loadOnboardingProfile } from "@/components/OnboardingModal";
 
 export function LandingPage() {
   const [params] = useSearchParams();
@@ -12,6 +14,9 @@ export function LandingPage() {
   const [code, setCode] = useState(inviteCode);
 
   useEffect(() => {
+    // 返利归因:带 ?inv= 的落地先落 localStorage(30 天内有效语义由覆盖写入天然实现)
+    const inv = params.get("inv");
+    if (inv) { try { localStorage.setItem(INVITE_BY_KEY, inv); } catch { /* 隐身模式等写失败不阻断 */ } }
     track("landing_uv", inviteCode ? { via: "share_card" } : {});
     platformApi.products().then(r => setProducts(r.products)).catch(() => {});
   }, []);
@@ -88,6 +93,10 @@ export function LandingPage() {
           </section>
         )}
 
+        {/* 备考倒计时(商业化 #8):读 onboarding 目标画像(tryout:onboarding:profile,
+            {position, company, deadline:YYYY-MM-DD});未设置则引导去 /interview 首次弹窗补填 */}
+        <CountdownCard />
+
         {/* 定价 */}
         <section className="mt-6">
           <h2 className="mb-3 font-mono text-sm text-ide-fg-muted">// 定价</h2>
@@ -111,3 +120,34 @@ export function LandingPage() {
 }
 
 export default LandingPage;
+
+// ── 备考倒计时卡(商业化 #8) ──────────────────────────────────────────────
+function CountdownCard() {
+  const [profile, setProfile] = useState<{ position: string; deadline: string } | null>(null);
+  useEffect(() => { setProfile(loadOnboardingProfile()); }, []);
+  const days = profile?.deadline
+    ? Math.ceil((new Date(`${profile.deadline}T00:00:00`).getTime() - Date.now()) / 86400_000)
+    : null;
+  if (!profile || !profile.deadline || days === null || Number.isNaN(days)) {
+    return (
+      <section className="mt-6 border border-ide-border bg-ide-bg-alt p-4 font-mono text-sm">
+        <span className="text-ide-fg-muted">还没有设定备考目标。</span>{" "}
+        <Link to="/interview" className="text-ide-accent underline">花 30 秒设定岗位与截止日期</Link>
+        <span className="text-ide-fg-muted">,这里会显示备考倒计时。</span>
+      </section>
+    );
+  }
+  const urgent = days <= 14;
+  return (
+    <section className={`mt-6 border p-4 font-mono ${urgent ? "border-ide-warning bg-ide-warning/10" : "border-ide-accent bg-ide-accent/10"}`}>
+      <div className="text-sm">
+        距 <b className="text-ide-accent">{profile.position || "目标岗位"}</b> 面试还有{" "}
+        <span className={`text-3xl ${urgent ? "text-ide-warning" : "text-ide-accent"}`}>{days >= 0 ? days : 0}</span> 天
+        {days < 0 && <span className="ml-2 text-xs text-ide-warning">(已过期,建议更新目标)</span>}
+      </div>
+      <div className="mt-1 text-xs text-ide-fg-muted">
+        {days >= 0 ? "建议节奏:每天 1 场模拟 + 错题重练;达标率 70% 即岗位就绪。" : "目标日期已过,可在练习页重新设定。"}
+      </div>
+    </section>
+  );
+}

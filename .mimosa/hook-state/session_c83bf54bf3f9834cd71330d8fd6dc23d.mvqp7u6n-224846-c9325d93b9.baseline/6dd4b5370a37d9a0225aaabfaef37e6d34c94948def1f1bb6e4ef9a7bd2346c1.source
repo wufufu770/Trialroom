@@ -2,7 +2,7 @@
 // 整合:群面配置面板 + 调度引擎 + 会议室可视化视图
 // 流程:配置 → 规则介绍 → 自我介绍 → 讨论 → 总结 → 面试官点评 → 结束
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api } from "@/api/client";
+import { api, formatApiError } from "@/api/client";
 import { cn, getDifficultyConfig, toastWarning } from "@/shared";
 import { useI18n } from "@/i18n";
 import { useLayoutContext } from "@/components/IdeLayout";
@@ -16,7 +16,7 @@ import {
   buildIntroPrompt, nextSelfIntroSpeaker, type GroupStage, type DiscussionMessage,
 } from "@/lib/groupDiscussionEngine";
 import { getPersonaMeta } from "@/lib/candidatePersonas";
-import { Users2, Play, Square, Loader2, AlertCircle, RotateCcw, ChevronRight } from "lucide-react";
+import { Users2, Play, Square, Loader2, AlertCircle, RotateCcw, ChevronRight, BarChart3 } from "lucide-react";
 
 const STAGE_I18N_KEYS: Record<GroupStage, string> = {
   intro: "group.stage.intro",
@@ -574,6 +574,9 @@ export function GroupInterviewPage() {
         />
       )}
 
+      {/* 结束态:群面个人表现报告(纯 CSS 条形,不引入图表库) */}
+      {stage === "ended" && <GroupReportSection messages={messages} topic={config.topic} />}
+
       {/* 底部操作栏 */}
       <div className="flex shrink-0 items-center justify-between border-t border-ide-border bg-ide-bg-alt px-3 py-2 text-xs">
         <button
@@ -612,6 +615,113 @@ export function GroupInterviewPage() {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ---- 群面个人表现报告(结束态) ----
+// 调 POST /api/group-report:服务端提取用户发言 → 单次 LLM 评估 → 强校验 JSON。
+// 渲染:三维评分 CSS 条形 + 优势/待改进两列;请求中禁用按钮;失败展示后端 message。
+type GroupReport = {
+  dimensions: { logic: number; communication: number; teamwork: number };
+  strengths: string[];
+  improvements: string[];
+};
+
+// i18n 优先:词条未落地时回退内置中文(与本页临时候选人姓名同一 fallback 模式)
+function grText(t: (k: string) => string, key: string, fallback: string): string {
+  const v = t(key);
+  return v === key ? fallback : v;
+}
+
+const REPORT_DIM_META: Array<{ key: keyof GroupReport["dimensions"]; i18nKey: string; fallback: string }> = [
+  { key: "logic", i18nKey: "group.report.dim.logic", fallback: "逻辑思维" },
+  { key: "communication", i18nKey: "group.report.dim.communication", fallback: "沟通表达" },
+  { key: "teamwork", i18nKey: "group.report.dim.teamwork", fallback: "团队协作" },
+];
+
+function GroupReportSection({ messages, topic }: { messages: MeetingMessage[]; topic: string }) {
+  const { t } = useI18n();
+  const [status, setStatus] = useState<"idle" | "loading" | "done" | "error">("idle");
+  const [report, setReport] = useState<GroupReport | null>(null);
+  const [errMsg, setErrMsg] = useState<string | null>(null);
+
+  const generate = async () => {
+    if (status === "loading") return;
+    setStatus("loading");
+    setErrMsg(null);
+    try {
+      const body = {
+        messages: messages.map((m) => ({
+          role: m.speakerKind === "user" ? "user" : "assistant",
+          content: m.content,
+        })),
+        position: topic,
+      };
+      const data = await api.request<{ ok: boolean; report: GroupReport }>("/group-report", {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+      if (!data?.report) {
+        throw new Error(grText(t, "group.report.empty", "报告数据为空,请重试"));
+      }
+      setReport(data.report);
+      setStatus("done");
+    } catch (e) {
+      // 失败展示后端 message(formatApiError 优先 i18nKey,回退 e.message)
+      setErrMsg(formatApiError(e, t));
+      setStatus("error");
+    }
+  };
+
+  const loading = status === "loading";
+  return (
+    <div className="shrink-0 border-t border-ide-border bg-ide-bg-alt px-3 py-2 text-xs">
+      <div className="flex items-center gap-2">
+        <button
+          onClick={generate}
+          disabled={loading}
+          className="flex items-center gap-1 bg-ide-accent px-2 py-1 text-ide-accent-fg hover:bg-ide-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {loading ? <Loader2 size={11} className="animate-spin" /> : <BarChart3 size={11} />}
+          {loading
+            ? grText(t, "group.report.generating", "评估生成中…")
+            : grText(t, "group.report.generate", "生成我的表现报告")}
+        </button>
+        {errMsg && <span className="flex-1 text-ide-danger">{errMsg}</span>}
+      </div>
+      {status === "done" && report && (
+        <div className="mt-2 border border-ide-border bg-ide-bg p-2">
+          <div className="flex flex-col gap-1.5">
+            {REPORT_DIM_META.map(({ key, i18nKey, fallback }) => {
+              const score = report.dimensions[key];
+              return (
+                <div key={key} className="flex items-center gap-2">
+                  <span className="w-14 shrink-0 text-[10px] text-ide-fg-muted">{grText(t, i18nKey, fallback)}</span>
+                  <div className="h-2 flex-1 bg-ide-border/40">
+                    <div className="h-full bg-ide-accent" style={{ width: `${(score / 5) * 100}%` }} />
+                  </div>
+                  <span className="w-7 shrink-0 text-right text-[10px] text-ide-fg">{score}/5</span>
+                </div>
+              );
+            })}
+          </div>
+          <div className="mt-2 grid grid-cols-2 gap-3">
+            <div>
+              <div className="mb-1 text-[10px] text-ide-accent">{grText(t, "group.report.strengths", "优势")}</div>
+              <ul className="list-disc pl-4 text-[11px] leading-relaxed text-ide-fg">
+                {report.strengths.map((s, i) => <li key={i}>{s}</li>)}
+              </ul>
+            </div>
+            <div>
+              <div className="mb-1 text-[10px] text-ide-warning">{grText(t, "group.report.improvements", "待改进")}</div>
+              <ul className="list-disc pl-4 text-[11px] leading-relaxed text-ide-fg">
+                {report.improvements.map((s, i) => <li key={i}>{s}</li>)}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

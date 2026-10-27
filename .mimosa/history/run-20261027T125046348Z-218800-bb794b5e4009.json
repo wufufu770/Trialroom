@@ -1,0 +1,61 @@
+{
+  "schemaVersion": "mimosa-finding-history/v1",
+  "runId": "20261027T125046348Z-218800-bb794b5e4009",
+  "runStatus": "inconclusive",
+  "errors": [
+    "candidate-select:server/package-lock.json: candidate_limit_exceeded: 6 changed reviewable file(s) were not scanned because the limit is 20",
+    "baseline-read:web/src/components/RoomChatView.tsx: baseline_snapshot_unreadable: file is missing from task baseline",
+    "scan:server/test/platform-questions.test.js: scanner_failed: spawnSync /usr/bin/node ETIMEDOUT",
+    "scan:web/src/pages/PlatformPage.tsx: scanner_failed: spawnSync /usr/bin/node ETIMEDOUT",
+    "scan:server/test/platform-r3-security.test.js: scanner_failed: spawnSync /usr/bin/node ETIMEDOUT",
+    "scan:server/test/platform-referral.test.js: scanner_failed: spawnSync /usr/bin/node ETIMEDOUT",
+    "scan:web/src/lib/monacoLoader.ts: scanner_failed: spawnSync /usr/bin/node ETIMEDOUT",
+    "scan:web/src/pages/AgentPage.tsx: scanner_failed: spawnSync /usr/bin/node ETIMEDOUT",
+    "scan:web/src/components/interview/MessageInput.tsx: scanner_failed: spawnSync /usr/bin/node ETIMEDOUT",
+    "scan:web/vite.config.ts: scanner_failed: spawnSync /usr/bin/node ETIMEDOUT",
+    "scan:web/src/pages/GroupInterviewPage.tsx: scanner_failed: spawnSync /usr/bin/node ETIMEDOUT",
+    "scan:web/src/pages/HistoryPage.tsx: scanner_failed: spawnSync /usr/bin/node ETIMEDOUT",
+    "scan:web/src/pages/InterviewPage.tsx: scanner_failed: spawnSync /usr/bin/node ETIMEDOUT",
+    "scan:web/src/pages/LandingPage.tsx: scanner_failed: spawnSync /usr/bin/node ETIMEDOUT",
+    "scan:web/src/components/EmptyStateHome.tsx: scanner_failed: spawnSync /usr/bin/node ETIMEDOUT",
+    "scan:web/src/components/RoomChatView.tsx: scanner_failed: spawnSync /usr/bin/node ETIMEDOUT",
+    "scan:web/src/api/client.ts: scanner_failed: spawnSync /usr/bin/node ETIMEDOUT",
+    "scan:web/src/api/platform.ts: scanner_failed: spawnSync /usr/bin/node ETIMEDOUT",
+    "scan:server/db.js: scanner_failed: spawnSync /usr/bin/node ETIMEDOUT",
+    "supply-chain-check:.: stop_budget_exhausted: focused supply-chain check was not run before the gate budget"
+  ],
+  "target": ".",
+  "revision": "a3fad9e04d8be7b3d88a5309b15d578db4279947",
+  "diffHash": "66286ff6c4da24e11ddbf1cc696927cc44a0b60bba9b4c767f99e52172ffa6ab",
+  "rulesVersion": "unavailable",
+  "recordedAt": "2026-10-27T12:50:46.348Z",
+  "timing": {
+    "startedAt": "2026-10-27T12:50:40.482Z",
+    "completedAt": "2026-10-27T12:50:46.348Z",
+    "durationMs": 5866
+  },
+  "tokens": {
+    "input": 0,
+    "output": 0,
+    "total": 0,
+    "modelCalls": 0,
+    "measurement": "known-zero"
+  },
+  "findings": {
+    "total": 0,
+    "bySeverity": {},
+    "byStatus": {}
+  },
+  "coverage": {
+    "status": "partial",
+    "reasonCounts": {
+      "candidate_limit_exceeded": 1,
+      "baseline_snapshot_unreadable": 1,
+      "scanner_failed": 17,
+      "stop_budget_exhausted": 1,
+      "project_check_failed": 20
+    }
+  },
+  "evidenceBoundary": "static_only",
+  "immutableReport": ".mimosa/reports/task-review-session_c83bf54bf3f9834cd71330d8fd6dc23d-20261027T125046348Z-218800-bb794b5e4009.json"
+}

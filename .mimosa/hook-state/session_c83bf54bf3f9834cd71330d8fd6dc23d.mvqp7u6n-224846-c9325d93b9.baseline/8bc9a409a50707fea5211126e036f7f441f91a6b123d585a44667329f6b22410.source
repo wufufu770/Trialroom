@@ -342,6 +342,9 @@ export const api = {
     request<{ ok: true }>(`/answers/${feedbackId}/missed`, { method: "PUT", body: JSON.stringify({ isMissed }) }),
   deleteAnswer: (feedbackId: string) => request<{ ok: true }>(`/answers/${feedbackId}`, { method: "DELETE" }),
 
+  // ---- ★3 错题本:跨会话聚合 is_missed=1(基座认证,登录态私有) ----
+  listMissedQuestions: (limit = 100) => request<any[]>(`/missed-questions?limit=${limit}`),
+
   // ---- v11:简历押题 ----
   predictQuestions: (data: { provider: string; materialId?: string; resumeText?: string; jdText?: string }) =>
     request<any>("/analysis/predict-questions", { method: "POST", body: JSON.stringify(data) }),

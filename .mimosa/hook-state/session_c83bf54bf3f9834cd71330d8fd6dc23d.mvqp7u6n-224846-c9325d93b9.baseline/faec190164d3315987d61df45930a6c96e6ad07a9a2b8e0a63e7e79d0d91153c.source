@@ -1213,3 +1213,24 @@ export function deleteQuestionFeedback(feedbackId) {
   db.prepare(`DELETE FROM question_feedback WHERE feedback_id = ?`).run(feedbackId);
   return { ok: true };
 }
+
+// ---- 错题本:跨会话聚合 is_missed = 1 的逐题反馈(★3) ----
+// 此前只有 listQuestionFeedback(sessionId) 的按会话查询,复习场景需要跨会话视图。
+// 聚合语义:按 question 文本去重,保留**最近一次**的 myAnswer/sessionId/时间与短板标签,
+// 累计 missed 次数;按最近一次时间倒序,limit 钳制在 [1, 500](默认 100,防全表拉取)。
+// MAX(created_at) 与裸列混用是 SQLite 有明确定义的行为:含 min/max 聚合时,
+// 裸列取值自命中 min/max 的那一行(https://www.sqlite.org/lang_select.html#bareagg)。
+export function listMissedQuestions(limit = 100) {
+  const lim = Math.min(Math.max(Number(limit) || 100, 1), 500);
+  return camelizeAll(
+    db.prepare(
+      `SELECT question, answer, session_id, weakness_tags, better_answer,
+              MAX(created_at) AS last_missed_at, COUNT(*) AS missed_count
+       FROM question_feedback
+       WHERE is_missed = 1
+       GROUP BY question
+       ORDER BY last_missed_at DESC
+       LIMIT ?`
+    ).all(lim)
+  );
+}
