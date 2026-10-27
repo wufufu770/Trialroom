@@ -32,8 +32,7 @@ export const GATES = [
   { id: "G12", name: "题库来源卫生", cmd: "node tools/check-source-hygiene.mjs", kind: "static" },
   { id: "G13", name: "许可分发义务", cmd: "node tools/check-license-dist.mjs", kind: "static" },
   { id: "G11", name: "MCP 契约与暴露面", cmd: "node tools/check-mcp-contract.mjs && node tools/check-mcp-surface.mjs", kind: "static" },
-  // 以下门禁随对应施工包落地时逐个启用(登记即要求脚本存在 —— 元自检纪律):
-  // 部署包 → G10 Docker 镜像构建
+  { id: "G10", name: "Docker 镜像构建", cmd: "node tools/check-docker-build.mjs", kind: "optional", needsDocker: true, env: "TRIALROOM_DOCKER=1" },
 ];
 
 // ── 元自检 ────────────────────────────────────────────────────────────────

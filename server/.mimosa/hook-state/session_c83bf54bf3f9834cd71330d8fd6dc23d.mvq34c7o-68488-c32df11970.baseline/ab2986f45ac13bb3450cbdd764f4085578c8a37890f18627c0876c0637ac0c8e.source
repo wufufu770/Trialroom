@@ -11,9 +11,9 @@ function freshDb() {
   return db;
 }
 
-test("迁移:四个 SQL 文件按序应用且幂等", () => {
+test("迁移:五个 SQL 文件按序应用且幂等", () => {
   assert.deepEqual(listMigrationFiles(), [
-    "001_platform_schema.sql", "002_mcp_schema.sql", "003_payment_views.sql", "004_calibration_schema.sql",
+    "001_platform_schema.sql", "002_mcp_schema.sql", "003_payment_views.sql", "004_calibration_schema.sql", "005_hardening.sql",
   ]);
   const db = freshDb();
   const again = applyMigrations(db);
@@ -92,23 +92,38 @@ test("mcp_tokens:token_hash 唯一,scope 外键到 users", () => {
     /FOREIGN KEY/i);
 });
 
-test("003 视图:v_paid_user_stats 多口径并列输出", () => {
+test("003/005 视图:存在且多口径列齐备(数值口径由支付测试用生产函数验证)", () => {
   const db = freshDb();
-  db.prepare("INSERT INTO users (id) VALUES ('u1')").run();
-  db.prepare("INSERT INTO users (id) VALUES ('u2')").run();
-  const ins = db.prepare(`INSERT INTO orders (order_no, user_id, product_code, amount_fen, status,
-    buyer_account_hash, refund_state, refund_amount_fen, review_passed_at, paid_at)
-    VALUES (?, ?, 'p', ?, 'paid', ?, ?, ?, '2026-11-22T00:00:00Z', '2026-11-23T00:00:00Z')`);
-  ins.run("o1", "u1", 1, "acc_a", null, null);                  // ¥0.01 已付,未退款
-  ins.run("o2", "u1", 390, "acc_a", "done", 390);               // ¥3.9 已付但已全额退款
-  ins.run("o3", "u2", 390, "acc_b", null, null);                // ¥3.9 已付
-  const s = db.prepare("SELECT * FROM v_paid_user_stats").get();
-  assert.equal(s.dedup_account, 2);                              // a + b
-  assert.equal(s.dedup_account_excl_001, 2);                     // 排除 0.01 后仍 a + b
-  assert.equal(s.dedup_account_excl_refund, 2);                  // 剔除退款单:acc_a 仍有 0.01 单在
-  assert.equal(s.dedup_account_after_review, 2);                 // paid_at 均晚于 review_passed_at
-  assert.equal(s.order_count, 3);
-  assert.equal(s.gross_fen, 781);
+  const cols = db.prepare("SELECT * FROM v_paid_user_stats LIMIT 0").columns ?? [];
+  // better-sqlite3 无 columns API 时退化为 select 一行取键
+  const row = db.prepare("SELECT * FROM v_paid_user_stats").get();
+  const keys = Object.keys(row);
+  for (const k of ["dedup_account", "dedup_realname", "dedup_user", "dedup_account_excl_001",
+    "dedup_account_excl_refund", "dedup_account_after_review", "order_count", "gross_fen", "refunded_fen"]) {
+    assert.ok(keys.includes(k), `视图缺口径列 ${k}`);
+  }
+  void cols;
+});
+
+test("005 加固索引:首单部分唯一/轮次唯一/座位唯一", () => {
+  const db = freshDb();
+  db.prepare("INSERT INTO users (id) VALUES ('u_x')").run();
+  // 首单 paid 唯一
+  db.prepare("INSERT INTO rooms (room_id, room_code, host_user_id) VALUES (?, '999999', 'u_x')").run("rm_" + "d".repeat(22));
+  db.prepare("INSERT INTO orders (order_no, user_id, product_code, amount_fen, status) VALUES ('f1','u_x','first_order_001',1,'paid')").run();
+  assert.throws(() =>
+    db.prepare("INSERT INTO orders (order_no, user_id, product_code, amount_fen, status) VALUES ('f2','u_x','first_order_001',1,'paid')").run(),
+    /UNIQUE/i);
+  // 同房同轮唯一
+  db.prepare("INSERT INTO room_seats (id, room_id, user_id, seat_no, is_host) VALUES ('s9', ?, 'u_x', 1, 1)").run("rm_" + "d".repeat(22));
+  db.prepare("INSERT INTO room_messages (id, room_id, seat_id, turn_index, role, content) VALUES ('m1', ?, 's9', 1, 'interviewer', 'x')").run("rm_" + "d".repeat(22));
+  assert.throws(() =>
+    db.prepare("INSERT INTO room_messages (id, room_id, seat_id, turn_index, role, content) VALUES ('m2', ?, 's9', 1, 'interviewer', 'y')").run("rm_" + "d".repeat(22)),
+    /UNIQUE/i);
+  // 同房座位号唯一
+  assert.throws(() =>
+    db.prepare("INSERT INTO room_seats (id, room_id, user_id, seat_no) VALUES ('s10', ?, 'u_x', 1)").run("rm_" + "d".repeat(22)),
+    /UNIQUE/i);
 });
 
 test("004 校准:rater 与 label 的 CHECK 收紧", () => {

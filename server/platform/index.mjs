@@ -48,4 +48,15 @@ export function mountPlatform(app) {
   // MCP:限流(审查 P0-1:join_room 可 74 分钟枚举 10^6 房号)→ 同挂载内 auth 在前
   // (G06 的 PASS 形态;限流中间件在鉴权前,保护 DB 免受未认证请求打审计表)
   app.use("/mcp", createRateLimiter({ windowMs: 60_000, max: 30, label: "mcp" }), mcpAuthMiddleware, mcpRouter);
+
+  // 埋点保留期:每日清理 90 天前的匿名事件(审查 F6 遗留项)
+  const FUNNEL_RETENTION_DAYS = 90;
+  const pruneFunnel = () => {
+    try {
+      getDb().prepare(`DELETE FROM funnel_events WHERE created_at < datetime('now', ?)`)
+        .run(`-${FUNNEL_RETENTION_DAYS} days`);
+    } catch { /* 清理失败不致命,下个周期重试 */ }
+  };
+  pruneFunnel();
+  setInterval(pruneFunnel, 24 * 3600_000).unref();
 }

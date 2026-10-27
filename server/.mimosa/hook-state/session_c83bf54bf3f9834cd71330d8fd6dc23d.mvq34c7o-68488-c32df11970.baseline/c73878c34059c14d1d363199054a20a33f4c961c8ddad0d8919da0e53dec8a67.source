@@ -1,4 +1,5 @@
 // P8a · 房间 REST + 埋点行为测试
+process.env.TRIALROOM_DEV = "1"; // 对抗加固后 dev 引导默认拒绝,测试显式开启
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";

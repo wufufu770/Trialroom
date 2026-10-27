@@ -20,7 +20,9 @@ function freshDb() {
 }
 
 // ── RSA2 协议往返 ──────────────────────────────────────────────────────────
-const { publicKey, privateKey } = crypto.generateKeyPairSync("rsa", { modulusLength: 2048 });
+// 测试密钥用 3072 位(扫描器对 <3072 的 RSA 报弱加密;alipay.mjs 协议层不关心模长,
+// 生产密钥按支付宝要求由运营方提供 2048)
+const { publicKey, privateKey } = crypto.generateKeyPairSync("rsa", { modulusLength: 3072 });
 const pem = (k) => k.export({ type: "spki", format: "pem" }); // 公钥
 const priv = (k) => k.export({ type: "pkcs8", format: "pem" });
 

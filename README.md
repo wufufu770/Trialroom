@@ -248,3 +248,24 @@ docker compose up -d --build
 ## License
 
 [MIT](LICENSE)
+
+---
+
+## Trialroom 平台层(2026-10 平台化)
+
+本仓库在 Tryout 基座之上叠加了**参赛平台层**(PAYATHON 2026 · Vibe Pay 主赛道),全部平台数据独立落 `trialroom.db`,不触碰基座表:
+
+| 能力 | 入口 | 说明 |
+|---|---|---|
+| 支付 | `POST /api/platform/orders` | 支付宝网页应用收款(RSA2 全验签);mock/真实双轨自动切换;¥0.01 首单每人限一次(数据库部分唯一索引原子保证) |
+| 权益 | `entitlements` 表 | 唯一真相源;次卡/时间卡;退款即作废 |
+| 房间 | `/api/platform/rooms*` | 6 位房号只作入座凭证(接口永不回显);越权与不存在同响应 404 |
+| MCP | `POST /mcp` | 外部 agent 接入:6 工具冻结件 + 独立 token class(`mcp_tokens`)+ scope 分片 + aud 校验 + 错码锁定 |
+| 埋点 | `POST /track` | 匿名漏斗(landing_uv 等 8 事件),90 天保留期 |
+| κ 校准 | `node server/scripts/calibrate-judge.mjs` | mock-first;双阈值发布门禁(G14);换算表见 `server/platform/calibration/kappa.mjs` |
+
+**门禁**:`node tools/verify-all.mjs` 一条命令跑 13 道(GATES 数组为唯一真相源),包括鉴权作用域覆盖(G06)、MCP 契约(G11)、题库来源卫生(G12)、许可分发(G13)、κ 校准(G14)。
+
+**环境变量**:平台层配置(支付宝三要素、MCP_AUD、管理员令牌等)见 `.env.example` 的「Trialroom 平台层」段;不配支付宝密钥时支付走 mock 轨(自动打内控标,统计口径排除)。
+
+**设计文档**:`docs/spec/11-final-plan.md`(参赛方案全文)、`docs/official/`(官方口径取证与 9 问)、`docs/adrs/ADR-011`(MCP 双层权限)。

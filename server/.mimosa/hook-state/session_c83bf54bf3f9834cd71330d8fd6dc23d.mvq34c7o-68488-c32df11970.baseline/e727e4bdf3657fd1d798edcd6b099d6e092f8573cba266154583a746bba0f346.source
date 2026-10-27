@@ -126,6 +126,10 @@ app.use(requestLogger);
 app.use("/api", (req, res, next) => {
   // 健康检查:仅基础探活(无 verbose)豁免;verbose=1 需认证
   if (req.path === "/health" && req.query.verbose !== "1") return next();
+  // 平台层(/api/platform/*)走独立的 platformAuth 令牌体系(api_tokens class),
+  // 不叠基座全局 token —— 两个 token class 各管各的作用域(审查 F5:此前叠加导致
+  // 匿名商品目录/落地页全部 401)。平台写路由的鉴权在 routes 内 platformAuth 强制。
+  if (req.path === "/platform" || req.path.startsWith("/platform/")) return next();
   return authMiddleware(req, res, next);
 });
 
