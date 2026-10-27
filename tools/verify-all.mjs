@@ -34,6 +34,7 @@ export const GATES = [
   { id: "G11", name: "MCP 契约与暴露面", cmd: "node tools/check-mcp-contract.mjs && node tools/check-mcp-surface.mjs", kind: "static" },
   { id: "G10", name: "Docker 镜像构建", cmd: "node tools/check-docker-build.mjs", kind: "optional", needsDocker: true, env: "TRIALROOM_DOCKER=1" },
   { id: "G15", name: "平台层全链路 E2E", cmd: "node server/scripts/e2e-platform-full.mjs", kind: "test" },
+  { id: "G16", name: "压力测试(幂等/限流/吞吐/双进程 WAL)", cmd: "node server/scripts/stress-platform.mjs", kind: "optional", env: "TRIALROOM_STRESS=1" },
 ];
 
 // ── 元自检 ────────────────────────────────────────────────────────────────
