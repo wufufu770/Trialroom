@@ -6,10 +6,25 @@ import { stripInvisibleChars } from "./evidence/extractor.mjs";
 
 const LLM_BASE = () => process.env.TRIALROOM_LLM_BASE_URL ?? "https://api.minimax.chat/v1";
 
-// per-room 追问冷却(R2):模块级 roomId -> lastAt(ms);间隔不足即 429,
-// 防单房间高频触发 LLM(成本/滥用面)。房间关闭后的残留条目无害(仅小对象)。
+// per-room 追问冷却(R2)+ per-user 冷却与日限额(对抗审查 R3-4:
+// 仅 per-room 维度可被"建 1000 房轮询"绕过,LLM 成本失控)。
 const followUpLastAt = new Map(); // roomId -> ms
+const userLastAt = new Map();     // userId -> ms(per-user 全局 5s)
+const userDailyCount = new Map(); // userId -> { day, count }(每日 100 次)
 export const FOLLOWUP_COOLDOWN_MS = 3000;
+const USER_COOLDOWN_MS = 5000;
+const USER_DAILY_LIMIT = 100;
+
+function userDailyLeft(userId) {
+  const day = new Date().toISOString().slice(0, 10);
+  const rec = userDailyCount.get(userId);
+  if (!rec || rec.day !== day) { userDailyCount.set(userId, { day, count: 0 }); return USER_DAILY_LIMIT; }
+  return USER_DAILY_LIMIT - rec.count;
+}
+function userDailyIncr(userId) {
+  const rec = userDailyCount.get(userId);
+  if (rec) rec.count += 1;
+}
 
 // 出网主机校验:仅 http/https,拒绝环回/私网/保留(遵循安全约束,防 env 被改成内网地址)
 function assertSafeHost(urlStr) {
@@ -56,12 +71,24 @@ export async function aiFollowUp({ roomId, userId }) {
   const db = getDb();
   const room = db.prepare("SELECT * FROM rooms WHERE room_id = ? AND room_id IN (SELECT room_id FROM room_seats WHERE user_id = ? AND left_at IS NULL)").get(roomId, userId);
   if (!room) return { error: { status: 404, code: "NOT_FOUND", message: "房间不存在" } };
-  // 冷却检查在幂等 noop 之前:连续追问(即使上一条已是面试官消息)同样受限
+  // 冷却检查在幂等 noop 之前:per-room 3s + per-user 5s + per-user 日限额
   const now = Date.now();
   if (now - (followUpLastAt.get(roomId) ?? 0) < FOLLOWUP_COOLDOWN_MS) {
     return { error: { status: 429, code: "COOLDOWN", message: "追问过于频繁" } };
   }
+  if (now - (userLastAt.get(userId) ?? 0) < USER_COOLDOWN_MS) {
+    return { error: { status: 429, code: "COOLDOWN", message: "追问过于频繁(请稍候)" } };
+  }
+  if (userDailyLeft(userId) <= 0) {
+    return { error: { status: 429, code: "DAILY_LIMIT", message: "今日追问次数已达上限" } };
+  }
+  // 惰性清理:Map 超 5000 条时丢弃已过期条目,防无界膨胀
+  if (followUpLastAt.size > 5000) {
+    for (const [k, t] of followUpLastAt) if (now - t > FOLLOWUP_COOLDOWN_MS) followUpLastAt.delete(k);
+  }
   followUpLastAt.set(roomId, now);
+  userLastAt.set(userId, now);
+  userDailyIncr(userId);
   const seat = db.prepare("SELECT * FROM room_seats WHERE room_id = ? AND user_id = ?").get(roomId, userId);
   const lastCandidate = db.prepare("SELECT content, turn_index FROM room_messages WHERE room_id = ? AND role = 'candidate' ORDER BY turn_index DESC LIMIT 1").get(roomId);
   const lastTurn = db.prepare("SELECT turn_index, role FROM room_messages WHERE room_id = ? ORDER BY turn_index DESC LIMIT 1").get(roomId);

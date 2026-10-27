@@ -82,7 +82,8 @@ export function mountPlatform(app) {
   app.get("/share/:code.svg", publicLimiter, (req, res) => {
     const code = String(req.params.code ?? "");
     if (!/^\d{6}$/.test(code)) return res.status(404).type("text").send("not found");
-    const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    // esc 与 routes/rooms.mjs buildReadyCardSvg 保持同一转义集(& < >)——待抽 svg.mjs 共享
+    const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="320">
   <rect width="100%" height="100%" fill="#0d1117"/>
   <text x="40" y="70" fill="#3fb950" font-family="monospace" font-size="26">\$ Trialroom · 面试房间邀请</text>

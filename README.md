@@ -263,6 +263,7 @@ docker compose up -d --build
 | MCP | `POST /mcp` | 外部 agent 接入:6 工具冻结件 + 独立 token class(`mcp_tokens`)+ scope 分片 + aud 校验 + 错码锁定 |
 | 埋点 | `POST /track` | 匿名漏斗(landing_uv 等 8 事件),90 天保留期 |
 | κ 校准 | `node server/scripts/calibrate-judge.mjs` | mock-first;双阈值发布门禁(G14);换算表见 `server/platform/calibration/kappa.mjs` |
+| 权益与尝试 | `/api/platform/attempts*` | 开跑扣次/收卷三条件判定/余量提醒;房间聊天室、错题本、邀请返利、就绪度记录卡、群面报告、MCP 令牌自助 |
 
 **门禁**:`node tools/verify-all.mjs` 一条命令跑 15 道(GATES 数组为唯一真相源),包括鉴权作用域覆盖(G06)、MCP 契约(G11)、题库来源卫生(G12)、许可分发(G13)、κ 校准(G14)、平台层全链路 E2E(G15)。
 

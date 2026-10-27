@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import "@/lib/monacoLoader";
 import Editor from "@monaco-editor/react";
 import { cn } from "@/shared";
 import { useAgentStore } from "@/stores/agentStore";

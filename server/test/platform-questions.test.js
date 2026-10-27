@@ -56,10 +56,10 @@ test("AI 追问:模板降级可跑;冷却 429;过冷却后 noop;外人 404", asy
   const first = await aiFollowUp({ roomId: r.room_id, userId: "uA" });
   assert.equal(first.source, "template", "无 key 时模板降级");
   assert.ok(first.content.length > 10);
-  // R2 加固:per-room 冷却 3s,冷却期内第二次 → 429
+  // R2 加固:per-room 3s + per-user 全局 5s,冷却期内第二次 → 429
   const cooled = await aiFollowUp({ roomId: r.room_id, userId: "uA" });
   assert.equal(cooled.error?.status, 429, "冷却期内应 429");
-  await new Promise((res) => setTimeout(res, 3100));
+  await new Promise((res) => setTimeout(res, 5100));
   const second = await aiFollowUp({ roomId: r.room_id, userId: "uA" });
   assert.equal(second.source, "noop", "过冷却后本轮已有面试官回应则不重复生成");
   getDb().prepare("INSERT INTO users (id) VALUES ('uX')").run();

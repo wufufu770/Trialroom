@@ -86,7 +86,7 @@ function ReadyCard() {
 // 商业化 #7/#9:quota_left≤2 或时间卡 30 天内到期 → 顶部警示条 + 免费/付费权益对比,
 // 用对比而非恐吓话术(免费本地练习永不被锁,付费是增量能力)。
 function QuotaNotice() {
-  const [quota, setQuota] = useState<{ quota_left: number; time_pass_nearest_expiry: string | null } | null>(null);
+  const [quota, setQuota] = useState<{ quota_left: number; time_pass_active?: boolean; time_pass_nearest_expiry: string | null } | null>(null);
   useEffect(() => {
     platformApi.quota().then(setQuota).catch(() => { /* 未登录平台则不展示 */ });
   }, []);
@@ -94,7 +94,8 @@ function QuotaNotice() {
   const daysLeft = quota.time_pass_nearest_expiry
     ? Math.ceil((new Date(quota.time_pass_nearest_expiry).getTime() - Date.now()) / 86400_000)
     : null;
-  const lowQuota = quota.quota_left <= 2;
+  // 对抗审查(质量#3):时间卡不限次,激活时不得谎报"剩 0 次"
+  const lowQuota = !quota.time_pass_active && quota.quota_left <= 2;
   const expiringSoon = daysLeft !== null && daysLeft <= 30;
   if (!lowQuota && !expiringSoon) return null;
   return (
@@ -479,7 +480,6 @@ function McpTokensBlock() {
   );
 }
 
-export default PlatformPage;
 
 // ── 管理标签页(P1#9):多口径统计卡 + 订单审计(admin token 专属) ──────────
 function AdminTab() {
@@ -527,3 +527,5 @@ function AdminTab() {
     </div>
   );
 }
+
+export default PlatformPage;

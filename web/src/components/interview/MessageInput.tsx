@@ -2,6 +2,7 @@
 // 抽出 C7 输入区(文本/代码/白板 三种模式),内部管理输入模式相关状态
 // text 模式的 input/setInput 由父组件持有(供 VoicePanel 语音识别复用),code/whiteboard 状态内部管理
 import { useState } from "react";
+import "@/lib/monacoLoader";
 import Editor from "@monaco-editor/react";
 import { cn } from "@/shared";
 import { useI18n } from "@/i18n";

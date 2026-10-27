@@ -85,7 +85,8 @@ router.get("/attempts/quota", platformAuth, (req, res) => {
   const tp = db.prepare(`SELECT MIN(valid_until) AS nearest FROM entitlements
     WHERE user_id = ? AND kind = 'time_pass' AND status = 'active' AND valid_until > ?`)
     .get(req.user.id, now);
-  res.json({ ok: true, quota_left: packs.quota_left, time_pass_nearest_expiry: tp.nearest ?? null });
+  // 对抗审查 R3(质量#3):时间卡不限次,quota_left=0 ≠ 不可用 —— 前端按 time_pass_active 分支
+  res.json({ ok: true, quota_left: packs.quota_left, time_pass_active: Boolean(tp.nearest), time_pass_nearest_expiry: tp.nearest ?? null });
 });
 
 // ── 商业化 #2 岗位就绪度认证卡:最近 10 场已完成的达标率 → SVG(认证版/修炼版)──
@@ -99,15 +100,18 @@ router.get("/ready-card", platformAuth, (req, res) => {
   const isPassed = (q) => { try { return JSON.parse(q ?? "null")?.passed === true; } catch { return false; } };
   const passedCount = rows.filter((r) => isPassed(r.qualification)).length;
   const rate = rows.length ? passedCount / rows.length : 0;
-  const ready = rows.length > 0 && rate >= 0.7;
+  // 对抗审查 R3-1(纪律):判据目前来自客户端回传,在接入服务端评分引擎前,
+  // 本卡只能是「练习达标记录」而非「认证」;样本 <5 场不给比率以免小样本误导。
+  const ready = rows.length >= 5 && rate >= 0.7;
+  const certified = false; // 服务端判分落地前恒为 false
   const svg = buildReadyCardSvg({
     name: String(user?.display_name ?? "").slice(0, 8) || "候选人",
     rate, passedCount, total: rows.length,
     position: String(rows[0]?.position ?? "通用岗位").slice(0, 16),
     date: new Date().toISOString().slice(0, 10),
-    ready,
+    ready, certified,
   });
-  res.json({ ok: true, svg, ready, pass_rate: rate, passed: passedCount, sample: rows.length });
+  res.json({ ok: true, svg, ready: certified, practice_ready: ready, pass_rate: rate, passed: passedCount, sample: rows.length });
 });
 
 // 与 index.mjs /share/:code.svg 同一视觉语言(#0d1117 底 / 等宽 / #3fb950 绿)
@@ -118,11 +122,11 @@ function buildReadyCardSvg({ name, rate, passedCount, total, position, date, rea
     return `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="320">
   <rect width="100%" height="100%" fill="#0d1117"/>
   <rect x="8" y="8" width="584" height="304" fill="none" stroke="#3fb950" stroke-width="2"/>
-  <text x="40" y="66" fill="#3fb950" font-family="monospace" font-size="24">$ 岗位就绪认证 · TRIALROOM</text>
+  <text x="40" y="66" fill="#3fb950" font-family="monospace" font-size="24">$ 练习达标记录(非认证) · TRIALROOM</text>
   <text x="40" y="130" fill="#e6edf3" font-family="monospace" font-size="52">${esc(name)}</text>
   <text x="40" y="180" fill="#e6edf3" font-family="monospace" font-size="34">${esc(position)} · 达标率 ${esc(pct)}</text>
   <text x="40" y="230" fill="#8b949e" font-size="17">近 ${total} 场已完成面试 ${passedCount} 场达到三条件标准</text>
-  <text x="40" y="282" fill="#8b949e" font-size="15">${esc(date)} · 判定口径:客观基准三条件(非模型自由裁量)</text>
+  <text x="40" y="282" fill="#8b949e" font-size="15">${esc(date)} · 练习自报口径,非认证;服务端判分上线后自动升级</text>
 </svg>`;
   }
   // 修炼版:不出现任何 κ 数值(校准纪律),也不宣示达标

@@ -6,6 +6,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Trialroom 平台层(R3)**:面试扣次闭环(`POST /api/platform/attempts` + `finish` 三条件判定)、房间网页聊天室(轮询+AI 追问+生命周期)、错题本聚合(`GET /api/missed-questions`)、邀请返利(`orders.invited_by` 终身一次)、岗位就绪度记录卡(练习口径,非认证)、MCP 令牌自助(冻结五档子集,上限 20)、权益提醒(`attempts/quota` + time_pass_active)、备考倒计时、群面个人表现报告(`POST /api/group-report`)、AI 面试官追问(per-room 3s + per-user 5s + 日限 100)、证据抽取器两段式、监控四信号、每日备份、支付宝 OAuth 登录、对账补偿与渠道退款。
+
 ### Added（Trialroom 平台层）
 
 - **支付宝网页应用收款 + 权益体系**:`POST /api/platform/orders`(RSA2 全验签;mock/真实双轨按三要素自动切换)、`entitlements` 表作权益唯一真相源(次卡/时间卡,退款即作废)、¥0.01 首单每人限一次(数据库部分唯一索引原子保证)、对账补偿定时任务。

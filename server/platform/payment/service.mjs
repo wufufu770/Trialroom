@@ -102,9 +102,9 @@ export function markPaid(orderNo, { tradeNo = null, buyerAccountHash = null, buy
     db.prepare("INSERT INTO entitlement_ledger (id, entitlement_id, delta, reason, ref) VALUES (?, ?, ?, 'grant', ?)")
       .run(genId("elf"), entId, product.quota ?? 1, orderNo);
     // ── 邀请返利(商业化 #1):被邀请人【首笔】paid 且带 invited_by → 邀请人 +1 次 attempt_pack。
-    // 同一被邀请人只奖励一次(查邀请人是否已因该被邀请人拿过 referral grant);
-    // 与主权益同事务原子授予。被邀请人退款不追回已发返利(refundOrder 不触碰 referral 权益,
-    // 单向礼让防"退款夺回"套利 —— 测试见 server/test/platform-referral.test.js 注释)。
+    // 同一被邀请人终身只奖励一次(对抗审查 R3-3:原按 (invitee,inviter) 对判定,
+    // "付款-退款-换邀请人"循环可套利;去掉 inviter 条件后终身一次)。
+    // 与主权益同事务原子授予。被邀请人退款不追回已发返利(单向礼让)。
     if (order.invited_by) {
       const isFirstPaid = !db.prepare(
         "SELECT 1 FROM orders WHERE user_id = ? AND status = 'paid' AND order_no != ? LIMIT 1")
@@ -112,8 +112,8 @@ export function markPaid(orderNo, { tradeNo = null, buyerAccountHash = null, buy
       const alreadyRewarded = !!db.prepare(`SELECT 1 FROM entitlement_ledger l
         JOIN entitlements e ON e.id = l.entitlement_id
         JOIN orders o ON o.order_no = e.order_no
-        WHERE o.user_id = ? AND o.invited_by = ? AND l.reason = 'grant' AND l.ref LIKE 'referral:%'
-        LIMIT 1`).get(order.user_id, order.invited_by);
+        WHERE o.user_id = ? AND o.invited_by IS NOT NULL AND l.reason = 'grant' AND l.ref LIKE 'referral:%'
+        LIMIT 1`).get(order.user_id);
       if (isFirstPaid && !alreadyRewarded) {
         const refEntId = genId("ent");
         db.prepare(`INSERT INTO entitlements (id, user_id, order_no, kind, quota_total, valid_until)
@@ -212,8 +212,8 @@ export function consumeEntitlement(userId, kind = "attempt_pack") {
 
 // 买家字段脱敏(R5):buyer_id/buyer_logon_id/seller_id 的值只留前 4 位,
 // 兼容 JSON("key":"v")与表单/查询串(key=v)两种 raw_body 形态。
-const BUYER_FIELD_JSON_RE = /("(?:buyer_id|buyer_logon_id|seller_id)"\s*:\s*")([^"]*)(")/g;
-const BUYER_FIELD_QS_RE = /((?:^|[?&])(?:buyer_id|buyer_logon_id|seller_id)=)([^&]*)/g;
+const BUYER_FIELD_JSON_RE = /("(?:(?:buyer|seller)\w*)"\s*:\s*")([^"]*)(")/g;
+const BUYER_FIELD_QS_RE = /((?:^|[?&])(?:(?:buyer|seller)\w*)=)([^&]*)/g;
 const maskValue = (v) => `${String(v).slice(0, 4)}***`;
 function maskBuyerFields(raw) {
   return String(raw)
@@ -226,7 +226,7 @@ export function recordNotification({ provider, rawBody, verifyOk, parsed = null 
   const masked = maskBuyerFields(String(rawBody)).slice(0, 16384);
   getDb().prepare(`INSERT INTO payment_notifications (id, provider, raw_body, verify_ok, parsed)
     VALUES (?, ?, ?, ?, ?)`).run(genId("pnt"), provider, masked, verifyOk ? 1 : 0,
-    parsed ? JSON.stringify(parsed) : null);
+    parsed ? maskBuyerFields(JSON.stringify(parsed)) : null);
 }
 
 /**

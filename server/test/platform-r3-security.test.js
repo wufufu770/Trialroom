@@ -55,7 +55,10 @@ test("R2 aiFollowUp:per-room 冷却连续两次第二次 429;他房不受影响;
   assert.equal(second.error?.code, "COOLDOWN");
   assert.equal(second.error?.message, "追问过于频繁");
   // 冷却是 per-room:另一房间立即可追问;注入零宽/双向字符的回答清洗后才拼 prompt
+  // 对抗加固后冷却双层:per-room 3s + per-user 全局 5s(R3-4)。
+  // 另一房间同用户也须等 per-user 冷却 —— 等待后验证清洗路径仍生效。
   const r2 = rooms.createRoom({ hostUserId: "uA" });
+  await new Promise((res) => setTimeout(res, 5100));
   const seat = getDb().prepare("SELECT id FROM room_seats WHERE room_id = ? AND is_host = 1").get(r2.room_id);
   getDb().prepare(`INSERT INTO room_messages (id, room_id, seat_id, turn_index, role, content)
     VALUES ('m_r3sec', ?, ?, 1, 'candidate', ?)`)

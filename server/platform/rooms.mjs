@@ -70,12 +70,14 @@ export function listMessages({ roomId, userId, afterTurn = 0 }) {
   return { messages: rows };
 }
 
-/** 候选人发言(非房主也可;内容 ≤8KB;turn 取当前最大轮)。 */
+/** 候选人发言(非房主也可;内容 ≤8KB;turn 取当前最大轮)。
+ *  对抗审查 R3-6:role 强制 candidate —— "system" 可被任意座位成员伪造,
+ *  在房内渲染成系统公告样式构成钓鱼面;系统消息只由服务端内部写入。 */
 export function postMessage({ roomId, userId, content, role = "candidate" }) {
   const db = getDb();
   const detail = roomDetail({ roomId, userId });
   if (detail.error) return detail;
-  if (!["candidate", "system"].includes(role)) role = "candidate";
+  role = "candidate";
   const text = String(content ?? "").slice(0, 8192);
   if (!text.trim()) return { error: { status: 400, code: "VALIDATION", message: "内容不能为空" } };
   const seat = db.prepare("SELECT id FROM room_seats WHERE room_id = ? AND user_id = ?").get(roomId, userId);

@@ -192,9 +192,11 @@ test("GET /ready-card:<70% 修炼版(无 κ);≥70% 就绪版(含达标率)", as
 
   const high = createDevUser("high-user");
   await buyPaid(high.token, "pack5_1990");
-  for (let i = 0; i < 4; i++) {
+  // 对抗审查 R3-1 后语义:判据服务端化前,ready(认证)恒 false;
+  // practice_ready(练习达标记录)= ≥5 场且达标率 ≥70%。此处 5 场 4 过 = 80%。
+  for (let i = 0; i < 5; i++) {
     const a = startAttempt({ userId: high.user_id, position: "后端工程师" });
-    const pass = i < 3; // 3/4 = 75% ≥ 70%
+    const pass = i < 4; // 4/5 = 80% ≥ 70%
     finishAttempt({
       attemptId: a.attempt_id, userId: high.user_id,
       scoreAfter: pass ? 80 : 10, baseline: 60,
@@ -205,9 +207,32 @@ test("GET /ready-card:<70% 修炼版(无 κ);≥70% 就绪版(含达标率)", as
     });
   }
   card = await call("GET", "/api/platform/ready-card", { token: high.token });
-  assert.equal(card.json.ready, true, "75% 达标率 → 就绪认证");
-  assert.ok(card.json.svg.includes("岗位就绪认证"));
-  assert.ok(card.json.svg.includes("75%"));
+  assert.equal(card.json.ready, false, "判据服务端化前不发放认证(R3-1 纪律)");
+  assert.equal(card.json.practice_ready, true, "≥5 场且 ≥70% → 练习达标记录成立");
+  assert.ok(card.json.svg.includes("练习达标记录"), "SVG 为记录口径而非认证");
+  assert.ok(!card.json.svg.includes("岗位就绪认证"));
+  assert.ok(card.json.svg.includes("80%"));
   assert.ok(card.json.svg.includes("high-use"), "含 display_name 前 8 位");
   assert.ok(!card.json.svg.includes("κ"));
+});
+
+// ── 对抗审查(质量#4):新端点 HTTP 层回归补强 ─────────────────────────────
+test("HTTP:无权益开跑 402;他人收卷 404;share.svg 非法 404/合法 200", async () => {
+  const noQuota = createDevUser("http-noquota");
+  const r402 = await call("POST", "/api/platform/attempts", { token: noQuota.token, body: {} });
+  assert.equal(r402.status, 402, "无权益必须 402");
+
+  const owner = createDevUser("http-owner");
+  const ord = await call("POST", "/api/platform/orders", { token: owner.token, body: { product_code: "single_390" } });
+  await call("POST", `/api/platform/orders/${ord.json.order_no}/mock-pay`, { token: owner.token });
+  const att = await call("POST", "/api/platform/attempts", { token: owner.token, body: {} });
+  const foreign = await call("POST", `/api/platform/attempts/${att.json.attempt_id}/finish`,
+    { token: noQuota.token, body: { scoreAfter: 1, baseline: 0, dimsBefore: {}, dimsAfter: {} } });
+  assert.equal(foreign.status, 404, "他人收卷 404 不泄露存在性");
+
+  const bad = await fetch(`${base}/share/abcdef.svg`);
+  assert.equal(bad.status, 404);
+  const good = await fetch(`${base}/share/123456.svg`);
+  assert.equal(good.status, 200);
+  assert.ok((good.headers.get("content-type") ?? "").includes("svg"));
 });

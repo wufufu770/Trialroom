@@ -28,6 +28,13 @@ router.post("/", platformAuth, requireScope("platform:write"), (req, res) => {
     // platform:admin 等平台档位不属于 MCP 冻结五档,一律拒绝
     return res.status(400).json({ ok: false, code: "SCOPE_ILLEGAL", message: `scopes 含未冻结档位:${illegal.join(",")}(允许:${MCP_SCOPES.join(",")})` });
   }
+  // 对抗审查 R3-5:每用户活跃 token 上限 20,防刷表灌库
+  const activeCount = db.prepare(`SELECT COUNT(*) AS c FROM mcp_tokens
+    WHERE user_id = ? AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > ?)`)
+    .get(req.user.id, new Date().toISOString()).c;
+  if (activeCount >= 20) {
+    return res.status(409).json({ ok: false, code: "TOKEN_LIMIT", message: "活跃 MCP 令牌已达上限(20),请先吊销不用的令牌" });
+  }
   const token = `mt_${crypto.randomBytes(24).toString("base64url")}`;
   const tokenId = genId("mcp");
   const expiresAt = new Date(Date.now() + DEFAULT_TTL_DAYS * 86400_000).toISOString();
