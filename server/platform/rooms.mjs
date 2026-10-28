@@ -17,7 +17,13 @@ function ownedResumeMaterialId(materialId, hostUserId) {
     const row = getBaseDb()
       .prepare("SELECT user_id FROM materials WHERE material_id = ? AND deleted_at IS NULL")
       .get(id);
-    return row && row.user_id === hostUserId ? id : null;
+    if (!row) return null;
+    // 对抗审查 R4-P1:基座 materials.user_id 恒为 'default'(本地单租户资料库,
+    // createMaterial 从不写平台用户 id)—— 平台 userId 与之严格相等恒 false,
+    // 会让简历感知出题 100% 静默失效。语义钉死:本机资料库即本部署的资料库,
+    // 'default' 视为资料库所有者;显式非 default 的他人材料仍拒绝(多租户未来兼容)。
+    const owns = row.user_id === hostUserId || row.user_id === "default";
+    return owns ? id : null;
   } catch {
     return null; // 基座库异常时静默降级,建房主流程不受影响
   }

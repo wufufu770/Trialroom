@@ -1264,10 +1264,14 @@ export function getSessionTranscript(sessionId) {
   const rows = [];
 
   // 1) 问答消息(按时间序;message_id 作次序保证同秒写入时结果确定)
+  //    对抗审查 R4-P2:无 LIMIT 时 2 万条消息 → 7.6MB 响应/秒级 CPU,封顶 2000 行取最新
+  const TRANSCRIPT_MAX_ROWS = 2000;
   const msgs = db.prepare(
     `SELECT message_id, role, content, agent_id, created_at
-     FROM messages WHERE session_id = ? ORDER BY created_at ASC, message_id ASC`
-  ).all(sessionId);
+     FROM messages WHERE session_id = ? ORDER BY created_at DESC, message_id DESC
+     LIMIT ${TRANSCRIPT_MAX_ROWS}`
+  ).all(sessionId).reverse();
+  const truncated = msgs.length >= TRANSCRIPT_MAX_ROWS;
   for (const m of msgs) {
     rows.push({
       t: m.created_at,

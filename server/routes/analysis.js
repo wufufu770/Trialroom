@@ -540,7 +540,8 @@ router.get("/sessions/:id/transcript", (req, res, next) => {
   try {
     const raw = getSessionTranscript(req.params.id);
     if (raw === null) throw new NotFoundError("会话");
-    res.ok({ ok: true, transcript: buildTranscriptTimeline(raw) });
+    // 对抗审查 R4-P2:行数封顶 2000(取最新),truncated 供前端提示
+    res.ok({ ok: true, transcript: buildTranscriptTimeline(raw), truncated: raw.length >= 2000 });
   } catch (e) {
     next(e);
   }

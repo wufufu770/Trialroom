@@ -62,6 +62,7 @@ export function validateAgent(agent, source = "agent") {
     e(`promptTemplate 必填且不少于 ${LIMITS.PROMPT_MIN} 字(当前 ${typeof agent.promptTemplate === "string" ? agent.promptTemplate.trim().length : 0})`);
   else if (agent.promptTemplate.length > LIMITS.PROMPT_MAX) e(`promptTemplate 超长(${agent.promptTemplate.length} > ${LIMITS.PROMPT_MAX})`);
   if (typeof agent.avatar !== "string" || !agent.avatar.trim()) e("avatar 必填(建议一个 emoji)");
+  else if (agent.avatar.length > LIMITS.AVATAR_MAX) e(`avatar 超长(${agent.avatar.length} > ${LIMITS.AVATAR_MAX})`);
   // 枚举
   if (!VALID_ROLES.includes(agent.role)) e(`role 必须是 ${VALID_ROLES.join("/")}`);
   if (!VALID_TONES.includes(agent.tone)) e(`tone 必须是 ${VALID_TONES.join("/")}`);
@@ -75,7 +76,8 @@ export function validateAgent(agent, source = "agent") {
     e(`tags 每项必须为非空字符串且 ≤ ${LIMITS.TAG_LEN_MAX} 字`);
   if (!Array.isArray(agent.focusAreas) || agent.focusAreas.length === 0 || agent.focusAreas.length > LIMITS.FOCUS_MAX)
     e(`focusAreas 必须是 1-${LIMITS.FOCUS_MAX} 个元素的数组`);
-  else if (agent.focusAreas.some((t) => typeof t !== "string" || !t.trim())) e("focusAreas 每项必须为非空字符串");
+  else if (agent.focusAreas.some((t) => typeof t !== "string" || !t.trim() || t.length > LIMITS.FOCUS_LEN_MAX))
+    e(`focusAreas 每项必须为非空字符串且 ≤ ${LIMITS.FOCUS_LEN_MAX} 字`);
   // meta:广场展示元信息(与顶层字段同义,便于消费方一次取齐)
   if (!agent.meta || typeof agent.meta !== "object" || Array.isArray(agent.meta)) {
     e("meta 必填且为对象 { author, tags, difficulty, description }");
@@ -84,9 +86,12 @@ export function validateAgent(agent, source = "agent") {
     if (!Array.isArray(agent.meta.tags) || agent.meta.tags.length === 0) e("meta.tags 必须为非空数组");
     if (typeof agent.meta.difficulty !== "number" || agent.meta.difficulty < 1 || agent.meta.difficulty > 10) e("meta.difficulty 必须是 1-10 的数字");
     if (typeof agent.meta.description !== "string" || !agent.meta.description.trim()) e("meta.description 必填且为非空字符串");
+    else if (agent.meta.description.length > LIMITS.DESC_MAX) e(`meta.description 超长(> ${LIMITS.DESC_MAX})`);
+    if (typeof agent.meta.author !== "string" || agent.meta.author.length > LIMITS.AUTHOR_MAX) e(`meta.author 超长(> ${LIMITS.AUTHOR_MAX})`);
   }
   // 内容红线:任何文本字段出现违禁词即拒绝
-  const scanned = [agent.name, agent.description, agent.promptTemplate, agent.author, ...(agent.tags || []), ...(agent.focusAreas || [])]
+  const scanned = [agent.name, agent.description, agent.promptTemplate, agent.author, agent.avatar, ...(agent.tags || []), ...(agent.focusAreas || []),
+    agent.meta?.author, agent.meta?.description, ...(agent.meta?.tags || [])]
     .filter((v) => typeof v === "string")
     .join("\n");
   for (const w of BANNED_WORDS) {
