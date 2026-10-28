@@ -5,7 +5,7 @@
 //   /mcp               mcpAuthMiddleware(独立 token class)→ mcpRouter
 import express from "express";
 import { getDb } from "./db.mjs";
-import { ensureAdminFromEnv } from "./auth.mjs";
+import { ensureAdminFromEnv, platformAuth, requireScope } from "./auth.mjs";
 import { createRateLimiter } from "../rateLimiter.js";
 import * as payment from "./routes/payment.mjs";
 import * as roomsRoutes from "./routes/rooms.mjs";
@@ -16,6 +16,7 @@ import { scheduleReconciliation } from "./payment/reconcile.mjs";
 import { scheduleBackup } from "./backup.mjs";
 import { mcpAuthMiddleware } from "./mcp/auth-mcp.mjs";
 import { mcpRouter } from "./mcp/router.mjs";
+import * as realtimeSessions from "./realtime/session.mjs";
 
 export function mountPlatform(app) {
   getDb();                 // 首次挂载即建库迁移(trialroom.db)
@@ -24,6 +25,78 @@ export function mountPlatform(app) {
   app.use("/api/platform", payment.router);
   app.use("/api/platform", roomsRoutes.router);
   app.use("/api/platform/mcp-tokens", mcpTokensRouter); // 商业化 #3:MCP 令牌自助
+
+  // —— GLM-Realtime 实时语音面试(服务端中继:浏览器 WS 不能带鉴权头) ——
+  // POST   /api/platform/realtime/sessions           创建(未配 key 且非 mock → 503 明确提示)
+  // POST   /api/platform/realtime/sessions/:id/messages  发 user 帧;text/audio_commit 走 SSE 回推
+  // DELETE /api/platform/realtime/sessions/:id        主动结束
+  const realtimeRouter = express.Router();
+  // 鉴权限定在 /realtime 前缀(对抗审查修复:裸 router.use 会对所有 /api/platform/*
+  // 生效,把后注册的 OAuth 公开回调也 401 掉 —— 全量回归抓到的挂载顺序回归)
+  realtimeRouter.use("/realtime", platformAuth, requireScope("platform:write"));
+  realtimeRouter.post("/realtime/sessions", (req, res) => {
+    realtimeSessions.startSession({ userId: req.user.id, position: req.body?.position })
+      .then((r) => {
+        if (r.error) return res.status(r.error.status).json({ ok: false, code: r.error.code, message: r.error.message });
+        res.json({ ok: true, session_id: r.sessionId, mock: r.mock });
+      })
+      .catch((e) => res.status(500).json({ ok: false, message: e.message }));
+  });
+  realtimeRouter.post("/realtime/sessions/:id/messages", (req, res) => {
+    const msg = req.body ?? {};
+    // 音频分片追加:无事件可回,直接 JSON 应答(事件由后续 text/audio_commit 的 SSE 流回)
+    if (msg.type === "audio") {
+      const r = realtimeSessions.relay(req.params.id, req.user.id, msg);
+      if (r.error) return res.status(r.error.status).json({ ok: false, code: r.error.code, message: r.error.message });
+      return res.json({ ok: true, appended: true });
+    }
+    if (msg.type !== "text" && msg.type !== "audio_commit") {
+      return res.status(400).json({ ok: false, message: "type 仅支持 text / audio / audio_commit" });
+    }
+    // 先 relay 后 SSE:会话 404 / 帧校验 400 走 JSON 状态码路径(而非 200+错误事件)。
+    // 上游事件最快也在 microtask/网络回合到达,sink 在同步块内绑好,不丢首帧。
+    const relayed = realtimeSessions.relay(req.params.id, req.user.id, msg);
+    if (relayed.error) {
+      return res.status(relayed.error.status).json({ ok: false, code: relayed.error.code, message: relayed.error.message });
+    }
+    // SSE:逐上游事件 res.write;response.done 即收流;15s 心跳防中间层断连
+    res.writeHead(200, {
+      "content-type": "text/event-stream; charset=utf-8",
+      "cache-control": "no-cache, no-transform",
+      connection: "keep-alive",
+      "x-accel-buffering": "no",
+    });
+    res.flushHeaders?.();
+    let closed = false;
+    const hb = setInterval(() => { if (!closed) res.write(": ping\n\n"); }, 15_000);
+    hb.unref?.();
+    const finish = () => {
+      if (closed) return;
+      closed = true;
+      clearInterval(hb);
+      realtimeSessions.unbindSink(req.params.id, req.user.id); // 断连标记 lastAt,供空闲回收
+      res.end();
+    };
+    const bind = realtimeSessions.bindSink(req.params.id, req.user.id, (evt) => {
+      if (closed) return;
+      res.write(`data: ${JSON.stringify(evt)}\n\n`);
+      if (evt?.type === "response.done" || evt?.type === "connection.closed") finish();
+    });
+    if (bind.error) { // 极窄竞态(relay 后会话被并发 DELETE):头已发出,以事件形式回错
+      res.write(`data: ${JSON.stringify({ type: "error", code: bind.error.code, message: bind.error.message })}\n\n`);
+      return finish();
+    }
+    // 断连检测用 res 而非 req:Node 18+ 的 req 'close' 在请求体读尽时就会触发
+    // (并不代表客户端断开),会把刚建立的事件流立即掐断。res 'close' 在连接
+    // 中断时触发;正常 res.end() 后的 close 由 closed 幂等挡住。
+    res.on("close", () => { if (!closed) finish(); });
+  });
+  realtimeRouter.delete("/realtime/sessions/:id", (req, res) => {
+    const r = realtimeSessions.endSession(req.params.id, req.user.id);
+    if (r.error) return res.status(r.error.status).json({ ok: false, code: r.error.code, message: r.error.message });
+    res.json({ ok: true, ended: true });
+  });
+  app.use("/api/platform", realtimeRouter);
 
   // 根作用域公开端点的独立限流(审查 F6/P0-1:此前 /track、/pay、/mcp 全部零限流)
   const publicLimiter = createRateLimiter({ windowMs: 60_000, max: 30, label: "public-root" });

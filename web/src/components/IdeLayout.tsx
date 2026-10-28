@@ -31,6 +31,8 @@ const NAV_ITEMS = [
   { to: "/experiences", labelKey: "nav.experiences", Icon: Newspaper },
   { to: "/market", labelKey: "nav.market", Icon: Store },
   { to: "/agents", labelKey: "nav.agents", Icon: Users },
+  // 智能体广场:消费社区贡献的 .ix-agent.json(Users 图标已在上方 import,无需新增)
+  { to: "/gallery", label: "智能体广场", Icon: Users },
   { to: "/materials", labelKey: "nav.materials", Icon: FileText },
   { to: "/history", labelKey: "nav.history", Icon: History },
   { to: "/settings", labelKey: "nav.settings", Icon: Settings },

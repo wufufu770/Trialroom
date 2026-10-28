@@ -13,7 +13,7 @@ function freshDb() {
 
 test("迁移:七个 SQL 文件按序应用且幂等", () => {
   assert.deepEqual(listMigrationFiles(), [
-    "001_platform_schema.sql", "002_mcp_schema.sql", "003_payment_views.sql", "004_calibration_schema.sql", "005_hardening.sql", "006_view_null_fix.sql", "007_referral.sql",
+    "001_platform_schema.sql", "002_mcp_schema.sql", "003_payment_views.sql", "004_calibration_schema.sql", "005_hardening.sql", "006_view_null_fix.sql", "007_referral.sql", "008_resume_room.sql",
   ]);
   const db = freshDb();
   const again = applyMigrations(db);

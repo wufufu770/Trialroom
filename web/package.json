@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && node scripts/copy-license.mjs",
+    "build": "npm run build:agents && vite build && node scripts/copy-license.mjs",
+    "build:agents": "node scripts/build-agent-gallery.mjs",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",

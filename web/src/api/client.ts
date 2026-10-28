@@ -21,6 +21,30 @@ const BASE = "/api";
 const TOKEN_KEY = "tryout:api_token";
 const LEGACY_TOKEN_KEY = "interviewx:api_token";
 
+// ---- 逐字稿回放(GET /api/sessions/:id/transcript) ----
+// 后端 routes/analysis.js 的 buildTranscriptTimeline 输出:同一条时间轴里
+// 混排 问答消息 / 逐题评估 / 语音答题录音,按 t(时间)升序。
+export interface TranscriptItem {
+  t: string;                                    // SQLite datetime,如 "2026-10-28 09:30:00"
+  kind: "question" | "answer" | "evaluation" | "recording";
+  role: string;                                 // 原始消息角色(user/assistant/evaluator...)
+  text: string;                                 // 截断到 300 字的正文
+  key: string;                                  // 去重主键(msg:/eval:/rec: 前缀)
+  // evaluation 专属
+  overallScore?: number | null;
+  dims?: { name: string; score: number; evidence?: string }[];
+  evidence?: string;                            // 维度评语/改进建议拼接的证据引用
+  // recording 专属
+  question?: string;                            // 录音对应的题干
+  wpm?: number;                                 // 语速(字/分钟)
+  durationMs?: number;                          // 录音时长(毫秒)
+}
+
+export interface SessionTranscriptResponse {
+  ok: boolean;
+  transcript: TranscriptItem[];
+}
+
 // ---- Normalize:补全兼容字段,让旧代码(provider.id / material.content)能直接用 ----
 function normalizeProvider(p: any): Provider {
   return { ...p, id: p.id || p.providerId };
@@ -341,6 +365,10 @@ export const api = {
   markAnswerMissed: (feedbackId: string, isMissed: boolean) =>
     request<{ ok: true }>(`/answers/${feedbackId}/missed`, { method: "PUT", body: JSON.stringify({ isMissed }) }),
   deleteAnswer: (feedbackId: string) => request<{ ok: true }>(`/answers/${feedbackId}`, { method: "DELETE" }),
+
+  // ---- 逐字稿回放:会话全量时间轴(GET /api/sessions/:id/transcript,基座认证私有) ----
+  fetchSessionTranscript: (sessionId: string) =>
+    request<SessionTranscriptResponse>(`/sessions/${sessionId}/transcript`),
 
   // ---- ★3 错题本:跨会话聚合 is_missed=1(基座认证,登录态私有) ----
   listMissedQuestions: (limit = 100) => request<any[]>(`/missed-questions?limit=${limit}`),

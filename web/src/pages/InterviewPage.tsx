@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "@/api/client";
 import { platformApi, getPlatformToken } from "@/api/platform";
@@ -37,8 +37,13 @@ import { registerLocalWhisper, setWhisperContext } from "@/lib/asr/localWhisper"
 import { buildReviewPrompt, parseReviewResult } from "@/lib/reviewGenerator";
 import {
   Loader2, AlertCircle, Paperclip, X, RotateCcw, BookOpen,
-  StopCircle, Sparkles, Ticket,
+  StopCircle, Sparkles, Ticket, Mic,
 } from "lucide-react";
+
+// GLM-Realtime 实时语音面试面板:lazy 按需加载(未开启不进 bundle),
+// 面板自身完成会话创建/麦克风采集/SSE 收流,与本页文字面试逻辑互不影响。
+const RealtimeVoicePanel = lazy(() =>
+  import("@/components/interview/RealtimeVoicePanel").then((m) => ({ default: m.RealtimeVoicePanel })));
 
 interface Provider {
   id: string;
@@ -196,6 +201,8 @@ export function InterviewPage() {
   const [pendingScenario, setPendingScenario] = useState<InterviewScenario | null>(null);
   // v10 C2:配置面板渐进式披露 - 默认折叠高级配置(难度/流程/重点/资料/面试官)
   const [showAdvanced, setShowAdvanced] = useState(false);
+  // GLM-Realtime 实时语音面试:工具条开关 + lazy 面板挂载(与本页会话状态无关)
+  const [showRealtime, setShowRealtime] = useState(false);
 
   // ★2 平台权益编排:开跑扣次(startAttempt)→ 常驻余量角标 → 收卷判定(finishAttempt)。
   // 全链路静默降级:平台不可用/未登录时本地练习照常,权益链路只增不改。
@@ -1415,6 +1422,17 @@ export function InterviewPage() {
               className="flex shrink-0 items-center gap-1 px-1.5 py-0.5 min-h-6 text-ide-fg-muted hover:bg-ide-bg-active hover:text-ide-fg">
               <Paperclip size={12} /> {t("interview.addMaterial")}
             </button>
+            {/* GLM-Realtime 实时语音面试开关:切换挂载/卸载 lazy 面板 */}
+            <button
+              onClick={() => setShowRealtime((v) => !v)}
+              title={showRealtime ? "关闭实时语音面试(GLM-Realtime)" : "开启实时语音面试(GLM-Realtime)"}
+              aria-pressed={showRealtime}
+              className={cn(
+                "flex min-h-6 shrink-0 items-center gap-1 px-1.5 py-0.5 text-[10px]",
+                showRealtime ? "bg-ide-accent text-ide-accent-fg" : "text-ide-fg-muted hover:bg-ide-bg-active hover:text-ide-fg",
+              )}>
+              <Mic size={12} /> 实时语音
+            </button>
             {/* v6:视图模式切换(仅会话开始后可用) */}
             {currentSession && messages.length > 0 && (
               <div className="flex items-center border border-ide-border">
@@ -1453,6 +1471,16 @@ export function InterviewPage() {
             )}
           </div>
         </div>
+
+        {/* GLM-Realtime 实时语音面试面板(懒加载;关闭即卸载,内部自清理会话) */}
+        {showRealtime && (
+          <Suspense fallback={<div className="border-b border-ide-border bg-ide-bg-alt px-3 py-2 text-xs text-ide-fg-muted">加载实时语音面板…</div>}>
+            <RealtimeVoicePanel
+              position={targetPosition || targetIndustry}
+              onClose={() => setShowRealtime(false)}
+            />
+          </Suspense>
+        )}
 
         {/* 注入的资料列表 */}
         {materials.length > 0 && (

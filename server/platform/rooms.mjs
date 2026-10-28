@@ -2,19 +2,38 @@
 // 纪律与 MCP 一致:room_code 只在创建/入座时出现一次;列表与详情永不回显;
 // 越权与不存在同响应(NOT_FOUND)。
 import { getDb, genId, newRoomId, newRoomCode } from "./db.mjs";
+// 基座 db:简历资料归属校验与内容读取都在基座(materials/material_contents)。
+// 注:基座 db.js 无 getMaterial 单查导出(先例见 routes/analysis.js 的 getMaterialContent),
+// 归属按 materials.user_id(默认 'default')直接查表,结构以基座 schema 为准。
+import { getDb as getBaseDb } from "../db.js";
 
 export const ROOM_NOT_FOUND = Object.freeze({ status: 404, code: "NOT_FOUND", message: "房间不存在" });
 
-export function createRoom({ hostUserId, industry = null, position = null }) {
+/** 简历绑定归属校验:材料必须存在、未软删、属于房主;否则返回 null(降级为普通房,不报错)。 */
+function ownedResumeMaterialId(materialId, hostUserId) {
+  if (!materialId) return null;
+  const id = String(materialId).slice(0, 64);
+  try {
+    const row = getBaseDb()
+      .prepare("SELECT user_id FROM materials WHERE material_id = ? AND deleted_at IS NULL")
+      .get(id);
+    return row && row.user_id === hostUserId ? id : null;
+  } catch {
+    return null; // 基座库异常时静默降级,建房主流程不受影响
+  }
+}
+
+export function createRoom({ hostUserId, industry = null, position = null, resumeMaterialId = null }) {
   const db = getDb();
   const roomId = newRoomId();
+  const resumeId = ownedResumeMaterialId(resumeMaterialId, hostUserId);
   // 碰撞换码重试:code 必须在循环内重新生成(审查 F1:循环外生成使重试形同虚设)
   let created = false;
   for (let i = 0; i < 5 && !created; i++) {
     const code = newRoomCode();
     try {
-      db.prepare("INSERT INTO rooms (room_id, room_code, host_user_id, industry, position) VALUES (?, ?, ?, ?, ?)")
-        .run(roomId, code, hostUserId, industry, position);
+      db.prepare("INSERT INTO rooms (room_id, room_code, host_user_id, industry, position, resume_material_id) VALUES (?, ?, ?, ?, ?, ?)")
+        .run(roomId, code, hostUserId, industry, position, resumeId);
       created = true;
       db.prepare("INSERT INTO room_seats (id, room_id, user_id, seat_no, is_host) VALUES (?, ?, ?, 1, 1)")
         .run(genId("seat"), roomId, hostUserId);

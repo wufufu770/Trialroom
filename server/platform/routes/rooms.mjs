@@ -19,7 +19,8 @@ router.post("/auth/dev-token", (req, res) => {
 });
 
 router.post("/rooms", platformAuth, requireScope("platform:write"), (req, res) => {
-  const r = rooms.createRoom({ hostUserId: req.user.id, industry: req.body?.industry, position: req.body?.position });
+  // resume_material_id:可选绑定基座简历材料(归属校验在服务层,不合法静默降级)
+  const r = rooms.createRoom({ hostUserId: req.user.id, industry: req.body?.industry, position: req.body?.position, resumeMaterialId: req.body?.resume_material_id });
   res.json({ ok: true, ...r, note: "room_code 仅本次返回,请立即分享;此后任何接口不再回显" });
 });
 

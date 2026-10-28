@@ -8,6 +8,7 @@ import { toast, type ToastEvent, type ToastKind } from "@/shared";
 // 路由级懒加载:减小首屏 bundle,只加载当前路由代码
 const GroupInterviewPage = lazy(() => import("@/pages/GroupInterviewPage").then(m => ({ default: m.GroupInterviewPage })));
 const AgentPage = lazy(() => import("@/pages/AgentPage").then(m => ({ default: m.AgentPage })));
+const AgentGalleryPage = lazy(() => import("@/pages/AgentGalleryPage").then(m => ({ default: m.AgentGalleryPage })));
 const MarketPage = lazy(() => import("@/pages/MarketPage").then(m => ({ default: m.MarketPage })));
 const FlowPage = lazy(() => import("@/pages/FlowPage").then(m => ({ default: m.FlowPage })));
 const ExperiencePage = lazy(() => import("@/pages/ExperiencePage").then(m => ({ default: m.ExperiencePage })));
@@ -95,6 +96,7 @@ export default function App() {
           <Route path="/experiences" element={<LazyRoute><ExperiencePage /></LazyRoute>} />
           <Route path="/market" element={<LazyRoute><MarketPage /></LazyRoute>} />
           <Route path="/agents" element={<LazyRoute><AgentPage /></LazyRoute>} />
+          <Route path="/gallery" element={<LazyRoute><AgentGalleryPage /></LazyRoute>} />
           <Route path="/materials" element={<LazyRoute><MaterialPage /></LazyRoute>} />
           <Route path="/history" element={<LazyRoute><HistoryPage /></LazyRoute>} />
           <Route path="/settings" element={<LazyRoute><SettingsPage /></LazyRoute>} />

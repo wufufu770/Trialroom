@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "@/api/client";
+import type { TranscriptItem } from "@/api/client";
 import { cn, formatTime } from "@/shared";
 import { EVALUATION_DIMENSIONS } from "@/lib/evaluation/starEvaluator";
 import { computePersonalBaseline, shouldShowBaseline } from "@/lib/evaluation/baseline";
@@ -24,7 +25,7 @@ import { useI18n } from "@/i18n";
 import { buildHeatmapData } from "@/lib/heatmapData";
 import { normalizeAgent, type Agent } from "@/types/agent";
 import type { SessionInfo, SessionReview } from "@/types/session";
-import { Sparkles, Loader2, AlertCircle, Star, TrendingUp, AlertTriangle, FolderOpen, Flame, MessagesSquare, Download, FileJson, FileText, BookX } from "lucide-react";
+import { Sparkles, Loader2, AlertCircle, Star, TrendingUp, AlertTriangle, FolderOpen, Flame, MessagesSquare, Download, FileJson, FileText, BookX, Mic } from "lucide-react";
 
 // 错题列表项(★3:GET /api/missed-questions 聚合行,camelCase)
 interface MissedQuestion {
@@ -97,6 +98,12 @@ export function HistoryPage() {
   const [missedLoaded, setMissedLoaded] = useState(false);
   const [missedExpanded, setMissedExpanded] = useState<string | null>(null); // 展开的题干(去重主键)
   const [missedTag, setMissedTag] = useState<string | null>(null);           // weakness tag 筛选
+
+  // 逐字稿回放:时间轴合并 问答消息 + 逐题评估 + 语音录音(GET /sessions/:id/transcript)。
+  // 懒加载:首次展开才拉取,避免给复盘页的常规浏览(曲线/雷达/错题本)增加一个串行请求。
+  const [transcript, setTranscript] = useState<TranscriptItem[] | null>(null);
+  const [transcriptLoading, setTranscriptLoading] = useState(false);
+  const [showTranscript, setShowTranscript] = useState(false);
   const navigate = useNavigate();
   // W5-1(P2-4):个人历史基准,替代此前硬编码 3.5 的"同岗位平均"假线。
   // 数据来自用户自己的全部评估;样本不足时不显示,而不是画一条编出来的线。
@@ -277,6 +284,103 @@ export function HistoryPage() {
   useEffect(() => {
     if (selectedId) loadDetail();
   }, [loadDetail]);
+
+  // 逐字稿回放:切换会话时清空缓存并收起(下一场的时间轴懒加载重新拉)
+  useEffect(() => {
+    setTranscript(null);
+    setShowTranscript(false);
+  }, [selectedId]);
+
+  // 逐字稿回放:展开/收起 + 首次展开时懒加载
+  const handleToggleTranscript = async () => {
+    if (showTranscript) {
+      setShowTranscript(false);
+      return;
+    }
+    setShowTranscript(true);
+    if (transcript !== null || !selectedId) return;
+    setTranscriptLoading(true);
+    try {
+      const r = await api.fetchSessionTranscript(selectedId);
+      setTranscript((r?.transcript as TranscriptItem[]) || []);
+    } catch (e: any) {
+      setError(t("history.loadDetailFailed", { msg: e.message }));
+      setTranscript([]);
+    } finally {
+      setTranscriptLoading(false);
+    }
+  };
+
+  // 逐字稿时间轴条目渲染:question 左绿 / answer 右默认 / evaluation 黄卡 / recording 灰
+  const renderTranscriptItem = (item: TranscriptItem, i: number) => {
+    const timeLabel = item.t ? formatTime(item.t) : "";
+    if (item.kind === "evaluation") {
+      return (
+        <div key={item.key || i} className="mx-auto w-full max-w-[92%] border border-ide-warning/40 bg-ide-warning/10 px-2 py-1.5">
+          <div className="mb-1 flex items-center gap-2 text-[10px] text-ide-warning">
+            <span className="font-semibold uppercase">评估</span>
+            {item.overallScore != null && (
+              <span className="bg-ide-warning/20 px-1 font-semibold">{item.overallScore}/10</span>
+            )}
+            {timeLabel && <span className="ml-auto opacity-70">{timeLabel}</span>}
+          </div>
+          {(item.dims || []).length > 0 && (
+            <div className="mb-1 grid gap-0.5">
+              {(item.dims || []).map((d, di) => (
+                <div key={di} className="flex items-baseline gap-2">
+                  <span className="shrink-0 text-ide-fg-muted">{d.name}</span>
+                  <span className="shrink-0 font-semibold text-ide-warning">{d.score}/5</span>
+                  {d.evidence && (
+                    <span className="min-w-0 truncate text-ide-fg-muted" title={d.evidence}>
+                      「{clip(d.evidence, 48)}」
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          {item.evidence && !(item.dims || []).length && (
+            <div className="text-ide-fg-muted">{clip(item.evidence, 80)}</div>
+          )}
+        </div>
+      );
+    }
+    if (item.kind === "recording") {
+      const sec = Math.round((item.durationMs || 0) / 1000);
+      return (
+        <div key={item.key || i} className="w-full max-w-[92%] border-l-2 border-ide-border bg-ide-bg-alt px-2 py-1.5 text-ide-fg-muted">
+          <div className="mb-1 flex items-center gap-2 text-[10px]">
+            <Mic size={10} />
+            <span className="font-semibold uppercase">录音</span>
+            {!!sec && <span>{Math.floor(sec / 60)}:{String(sec % 60).padStart(2, "0")}</span>}
+            {!!item.wpm && <span>{item.wpm} 字/分</span>}
+            {timeLabel && <span className="ml-auto opacity-70">{timeLabel}</span>}
+          </div>
+          <div className="whitespace-pre-wrap">{item.text || "(无转写记录)"}</div>
+          {item.question && <div className="mt-0.5 truncate opacity-70">题:{clip(item.question, 60)}</div>}
+        </div>
+      );
+    }
+    const isAnswer = item.kind === "answer";
+    return (
+      <div key={item.key || i} className={cn("flex w-full", isAnswer ? "justify-end" : "justify-start")}>
+        <div
+          className={cn(
+            "max-w-[85%] border-l-2 px-2 py-1.5",
+            isAnswer
+              ? "border-ide-border bg-ide-bg-alt text-ide-fg"
+              : "border-ide-success bg-ide-success/10 text-ide-fg"
+          )}
+        >
+          <div className={cn("mb-1 text-[10px]", isAnswer ? "text-ide-fg-muted" : "text-ide-success")}>
+            {isAnswer ? "A · 我" : "Q · 面试官"}
+            {timeLabel && ` · ${timeLabel}`}
+          </div>
+          <div className="whitespace-pre-wrap">{item.text}</div>
+        </div>
+      </div>
+    );
+  };
 
   // 选中分组时计算归纳
   useEffect(() => {
@@ -921,6 +1025,49 @@ export function HistoryPage() {
                 </div>
               )}
             </div>
+          </div>
+
+          {/* 逐字稿回放 —— 问答/评估/录音按时间合并的时间轴复盘视图(懒加载) */}
+          <div className="border-t border-ide-border">
+            <div className="flex items-center justify-between gap-1 border-b border-ide-border px-3 py-1.5 text-xs font-semibold uppercase text-ide-fg-muted">
+              <div className="flex items-center gap-2">
+                <Mic size={12} />
+                逐字稿回放
+                {transcript !== null && (
+                  <span className="text-[10px] font-normal normal-case text-ide-fg-muted">
+                    {transcript.length} 条 · 问答 {transcript.filter((x) => x.kind === "answer" || x.kind === "question").length}
+                    {" "}· 评估 {transcript.filter((x) => x.kind === "evaluation").length}
+                    {" "}· 录音 {transcript.filter((x) => x.kind === "recording").length}
+                  </span>
+                )}
+              </div>
+              {selected && (
+                <button
+                  onClick={handleToggleTranscript}
+                  disabled={transcriptLoading}
+                  className="flex h-6 items-center gap-1 border border-ide-border bg-ide-bg-alt px-2 normal-case text-ide-fg hover:bg-ide-accent/10 hover:text-ide-accent disabled:opacity-50"
+                >
+                  {transcriptLoading ? <Loader2 size={12} className="animate-spin" /> : <Mic size={12} />}
+                  {transcriptLoading ? "加载中…" : showTranscript ? "收起" : "展开时间轴"}
+                </button>
+              )}
+            </div>
+            {showTranscript && (
+              <div className="p-3 font-mono text-[11px] leading-relaxed">
+                {transcriptLoading ? (
+                  <div className="flex items-center gap-2 text-ide-fg-muted">
+                    <Loader2 size={12} className="animate-spin" />
+                    正在合并问答、评估与录音…
+                  </div>
+                ) : !transcript || transcript.length === 0 ? (
+                  <div className="py-2 text-ide-fg-muted">
+                    本场没有可回放的逐字稿:先完成一轮问答(或语音答题/逐题评估),时间轴会在这里按时间合并展示。
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-1.5">{transcript.map(renderTranscriptItem)}</div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* 对话回看区 */}

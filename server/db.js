@@ -1234,3 +1234,107 @@ export function listMissedQuestions(limit = 100) {
     ).all(lim)
   );
 }
+
+// ---- 逐字稿复盘:会话全量时间轴聚合(messages + evaluations + answer_recordings) ----
+// 背景:复盘所需的原始数据早已各自落库(问答消息 messages、逐题评估
+// evaluations/evaluation_dimensions、语音答题 answer_recordings),但只有按表
+// 分列的查询,前端拼不出竞品标配的"逐字稿回放"时间轴。
+// 这里一次聚合出按时间排序的时间轴**原料行**,形态统一:
+//   { t, kind: "question"|"answer"|"evaluation"|"recording", role, text(截300),
+//     key, dims?, evidence?, overallScore?, question?, wpm?, durationMs? }
+// 消息角色映射:role=user(候选人)→ answer,其余(assistant/system 面试官侧)→ question。
+// 评估证据(evidence):evaluation_dimensions.comment(锚点判定 + 原文依据引用)拼接,
+// 无维度评语时回退 improvement_advice。
+// 去重/合并/防御性排序由 routes/analysis.js 的纯函数 buildTranscriptTimeline 完成
+// (便于无库单测);本函数保证输出按 t 升序。全部查询参数化;session 不存在返回 null
+// (路由层映射 404)。
+const TRANSCRIPT_TEXT_CLIP = 300;
+const TRANSCRIPT_EVIDENCE_CLIP = 200;
+
+function clipForTranscript(value, n) {
+  const s = String(value ?? "").trim();
+  return s.length > n ? `${s.slice(0, n)}…` : s;
+}
+
+export function getSessionTranscript(sessionId) {
+  if (!sessionId) return null;
+  const session = db.prepare("SELECT session_id FROM sessions WHERE session_id = ?").get(sessionId);
+  if (!session) return null;
+
+  const rows = [];
+
+  // 1) 问答消息(按时间序;message_id 作次序保证同秒写入时结果确定)
+  const msgs = db.prepare(
+    `SELECT message_id, role, content, agent_id, created_at
+     FROM messages WHERE session_id = ? ORDER BY created_at ASC, message_id ASC`
+  ).all(sessionId);
+  for (const m of msgs) {
+    rows.push({
+      t: m.created_at,
+      kind: m.role === "user" ? "answer" : "question",
+      role: m.role,
+      text: clipForTranscript(m.content, TRANSCRIPT_TEXT_CLIP),
+      key: `msg:${m.message_id}`,
+      agentId: m.agent_id || null,
+    });
+  }
+
+  // 2) 逐题评估:维度分 + 评语即证据(批量取 dimensions,避免 N+1)
+  const evals = db.prepare(
+    `SELECT evaluation_id, overall_score, report, improvement_advice, generated_at
+     FROM evaluations WHERE session_id = ?`
+  ).all(sessionId);
+  if (evals.length > 0) {
+    const placeholders = evals.map(() => "?").join(",");
+    const dimRows = db.prepare(
+      `SELECT evaluation_id, dimension_name, score, comment
+       FROM evaluation_dimensions WHERE evaluation_id IN (${placeholders})`
+    ).all(...evals.map((e) => e.evaluation_id));
+    const dimMap = new Map();
+    for (const d of dimRows) {
+      if (!dimMap.has(d.evaluation_id)) dimMap.set(d.evaluation_id, []);
+      dimMap.get(d.evaluation_id).push({
+        name: d.dimension_name,
+        score: d.score,
+        evidence: clipForTranscript(d.comment, TRANSCRIPT_EVIDENCE_CLIP),
+      });
+    }
+    for (const e of evals) {
+      const dims = dimMap.get(e.evaluation_id) || [];
+      const evidence = dims.length > 0
+        ? clipForTranscript(dims.map((d) => d.evidence).filter(Boolean).join("; "), TRANSCRIPT_EVIDENCE_CLIP)
+        : clipForTranscript(e.improvement_advice, TRANSCRIPT_EVIDENCE_CLIP);
+      rows.push({
+        t: e.generated_at,
+        kind: "evaluation",
+        role: "evaluator",
+        text: clipForTranscript(e.report, TRANSCRIPT_TEXT_CLIP),
+        key: `eval:${e.evaluation_id}`,
+        overallScore: e.overall_score,
+        dims,
+        evidence,
+      });
+    }
+  }
+
+  // 3) 语音答题录音:时长 / 语速 / 转写摘要(转写为空时退回题干)
+  const recs = db.prepare(
+    `SELECT recording_id, question, transcript, wpm, duration_ms, created_at
+     FROM answer_recordings WHERE session_id = ? ORDER BY created_at ASC, recording_id ASC`
+  ).all(sessionId);
+  for (const r of recs) {
+    rows.push({
+      t: r.created_at,
+      kind: "recording",
+      role: "user",
+      text: clipForTranscript(r.transcript || r.question, TRANSCRIPT_TEXT_CLIP),
+      key: `rec:${r.recording_id}`,
+      question: clipForTranscript(r.question, 120),
+      wpm: r.wpm || 0,
+      durationMs: r.duration_ms || 0,
+    });
+  }
+
+  rows.sort((a, b) => String(a.t).localeCompare(String(b.t)) || String(a.key).localeCompare(String(b.key)));
+  return rows;
+}

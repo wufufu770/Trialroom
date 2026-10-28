@@ -108,3 +108,34 @@ git config core.hooksPath .githooks
 - 遇到问题：开 issue，描述你的环境（操作系统、Node 版本）和复现步骤
 - 想讨论功能方向：开 issue 用 `feature request` 标签
 - 认领任务：在 issue 下留言，避免重复劳动
+
+## 提交你的智能体到广场
+
+智能体广场（前端 `/gallery` 页）展示社区贡献的面试官智能体，数据全部来自 `data/community-agents/` 目录，构建时静态生成，无服务器依赖。
+
+提交流程：
+
+1. 在 Agent 工作台（`/agents`）调好你的智能体，点列表项上的分享按钮导出 `.ix-agent.json`。
+2. 把文件放进 `data/community-agents/`，文件名用英文短横线命名（如 `frontend-stress.json`，会同时作为广场 id 与详情页目录名）。
+3. 在导出文件基础上补齐社区元信息：`author`、`tags`（1-8 个）、`description`（≤200 字）与 `meta: { author, tags, difficulty, description }`。
+4. 本地校验并预览：
+
+   ```bash
+   cd web && npm run build:agents   # 校验失败会以退出码 1 拒绝
+   npm run dev                       # 打开 /gallery 查看
+   ```
+
+5. 提 PR。CI 会重跑校验与测试，校验不过的 PR 会被拒绝。
+
+字段要求（完整规则见 `web/scripts/build-agent-gallery.mjs`）：
+
+- `kind` 必须是 `interviewx-agent`，`version` 为 `1`；
+- `role`（hr/tech/ceo/custom）、`tone`（gentle/direct/aggressive/neutral/professional）、`agentKind`（interviewer/candidate）取值需在白名单内；
+- `difficulty` 为 1-10 的整数；
+- `promptTemplate` ≥ 200 字，且要有可执行的结构（角色设定 / 流程 / 追问策略 / 输出格式），不要只写一句人设；
+- `name` / `author` / `avatar` / `description` / `focusAreas`（1-8 项）均必填。
+
+内容红线（违反直接拒绝）：
+
+- 不得用于违法用途，不得包含违法、歧视、骚扰内容；
+- 不得包含替考、作弊、代面等“代替本人参加真实面试/考试”类用途的话术——广场只服务“练习与陪练”，不服务“替你上场”。

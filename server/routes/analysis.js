@@ -17,6 +17,7 @@ import {
   setQuestionMissed,
   deleteQuestionFeedback,
   getSession,
+  getSessionTranscript,
   getMaterialContent,
   getActiveProvider,
   getTodayTokenUsage,
@@ -428,6 +429,118 @@ ${transcript}
     }
 
     res.ok({ ok: true, report, degraded: !!result.degraded });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// ---- 逐字稿回放(纯函数 + 路由) ----
+// 背景:一场面试的复盘数据散落三张表(问答 messages / 逐题评估 evaluations /
+// 语音答题 answer_recordings),db.getSessionTranscript 负责聚合原料行,
+// 这里做两件事:
+//   1. buildTranscriptTimeline(raw):纯函数 —— 去重(显式 key 优先,缺失时按
+//      kind+t+text 合成)、同 key 评估行合并维度、按 t 稳定升序、文本截断。
+//      抽成纯函数是为了不建库也能单测排序/去重/截断这些最容易回归的逻辑。
+//   2. GET /api/sessions/:id/transcript:鉴权与同文件其他 analysis 路由一致 ——
+//      index.js 的全局 /api authMiddleware 挂载在本路由之前(2026-10-27 修复后
+//      的顺序,见 index.js:120-141),登录态私有;session 不存在 → 404。
+const TRANSCRIPT_KINDS = new Set(["question", "answer", "evaluation", "recording"]);
+const TRANSCRIPT_TEXT_LIMIT = 300;
+const TRANSCRIPT_EVIDENCE_LIMIT = 200;
+
+function clipTranscriptText(value, n) {
+  const s = String(value ?? "").trim();
+  return s.length > n ? `${s.slice(0, n)}…` : s;
+}
+
+// SQLite datetime('now') 是 "YYYY-MM-DD HH:MM:SS"(UTC),空格分隔符 Date.parse
+// 在部分引擎拒收;换 "T" 后即可解析。解析失败(字段脏数据)返回 null,
+// 由调用方回退字典序比较(SQLite 格式本身字典序即时间序)。
+function parseTimelineTs(s) {
+  const v = Date.parse(String(s ?? "").replace(" ", "T"));
+  return Number.isNaN(v) ? null : v;
+}
+
+// 纯函数:聚合行 → 去重排序后的逐字稿时间轴。
+// 输入:db.getSessionTranscript 的原料行(或测试构造的等形态行),
+//   每行 { t, kind, role, text, key?, dims?, evidence?, overallScore?, question?, wpm?, durationMs? }。
+// 输出:[{ t, kind, role, text(≤300), key, dims?, evidence?, ... }] 按 t 升序;
+//   同 key 的多行(如评估维度被拆成多行)合并为一条,dim 按名去重;
+//   非法行(null / 缺 kind / 未知 kind)直接丢弃,绝不透传脏结构。
+export function buildTranscriptTimeline(raw) {
+  const rows = Array.isArray(raw) ? raw : [];
+  const byKey = new Map();
+  const items = [];
+  for (const row of rows) {
+    if (!row || typeof row !== "object") continue;
+    const kind = row.kind;
+    if (!TRANSCRIPT_KINDS.has(kind)) continue;
+    const t = row.t == null ? "" : String(row.t);
+    // 去重主键:显式 key 优先;无 key 时同一时刻同一句话只保留第一条
+    const key = row.key ? String(row.key) : `${kind}|${t}|${String(row.text || "")}`;
+
+    const existing = byKey.get(key);
+    if (existing) {
+      // 同 key 合并:维度分多行来源时并进同一条评估(按维度名去重)
+      if (Array.isArray(row.dims)) {
+        const seen = new Set(existing.dims.map((d) => d.name));
+        for (const d of row.dims) {
+          if (d && d.name && !seen.has(d.name)) {
+            existing.dims.push({
+              name: String(d.name),
+              score: Number(d.score) || 0,
+              evidence: clipTranscriptText(d.evidence ?? d.comment, TRANSCRIPT_EVIDENCE_LIMIT),
+            });
+            seen.add(d.name);
+          }
+        }
+      }
+      continue;
+    }
+
+    const item = {
+      t,
+      kind,
+      role: String(row.role || ""),
+      text: clipTranscriptText(row.text, TRANSCRIPT_TEXT_LIMIT),
+      key,
+    };
+    if (kind === "evaluation") {
+      const overall = Number(row.overallScore);
+      item.overallScore = Number.isFinite(overall) ? overall : null;
+      item.dims = (Array.isArray(row.dims) ? row.dims : [])
+        .filter((d) => d && d.name)
+        .map((d) => ({
+          name: String(d.name),
+          score: Number(d.score) || 0,
+          evidence: clipTranscriptText(d.evidence ?? d.comment, TRANSCRIPT_EVIDENCE_LIMIT),
+        }));
+      item.evidence = clipTranscriptText(row.evidence, TRANSCRIPT_EVIDENCE_LIMIT);
+    }
+    if (kind === "recording") {
+      item.question = clipTranscriptText(row.question, 120);
+      item.wpm = Number(row.wpm) || 0;
+      item.durationMs = Number(row.durationMs) || 0;
+    }
+    byKey.set(key, item);
+    items.push(item);
+  }
+
+  // 稳定排序:t 升序,同 t(同秒写入)按 key 决出确定序
+  return items.sort((a, b) => {
+    const ta = parseTimelineTs(a.t);
+    const tb = parseTimelineTs(b.t);
+    if (ta !== null && tb !== null && ta !== tb) return ta - tb;
+    return String(a.t).localeCompare(String(b.t)) || a.key.localeCompare(b.key);
+  });
+}
+
+// GET /api/sessions/:id/transcript 逐字稿回放时间轴
+router.get("/sessions/:id/transcript", (req, res, next) => {
+  try {
+    const raw = getSessionTranscript(req.params.id);
+    if (raw === null) throw new NotFoundError("会话");
+    res.ok({ ok: true, transcript: buildTranscriptTimeline(raw) });
   } catch (e) {
     next(e);
   }

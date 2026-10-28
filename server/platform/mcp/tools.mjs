@@ -6,6 +6,8 @@
 //   * evidence.search 只检索本人有座位的房间(证据区),永不跨房
 import { getDb, genId, nowIso } from "../db.mjs";
 import { pickQuestion } from "../questions.mjs";
+// 基座简历材料内容(getMaterialContent 先例见 routes/analysis.js;包 try/catch 失败降级)
+import { getMaterialContent } from "../../db.js";
 
 // join_room 错码锁定(11-final-plan §3.4.4:按房号失败限流锁定)。
 // 单进程内存态;多副本部署时换共享存储。锁定期一律返回 NOT_FOUND(不泄露锁定状态)。
@@ -99,7 +101,16 @@ export const tools = {
     }
     // P0#2:真题注入 —— 按房间 industry(难度可空)从 808 题库取未用题;
     // referenceAnswer 永不出服务端(证据/结论分离,§3.6)。
-    const picked = pickQuestion({ roomId: room_id, industry: room.industry, difficulty: room.difficulty });
+    // 简历感知:房主建房绑定的简历材料(008)按词面加权取题——"简历写了 Redis 就问 Redis";
+    // 材料内容截 8000 字符,基座读取失败降级为普通取题。
+    let resumeText = null;
+    if (room.resume_material_id) {
+      try {
+        const mat = getMaterialContent(room.resume_material_id);
+        if (mat?.rawText) resumeText = String(mat.rawText).slice(0, 8000);
+      } catch { resumeText = null; }
+    }
+    const picked = pickQuestion({ roomId: room_id, industry: room.industry, difficulty: room.difficulty, resumeText });
     const question = picked
       ? { turn_index: turn, question_ref: picked.question_ref, title: picked.title,
           question: picked.content, type: picked.type, difficulty: picked.difficulty,
